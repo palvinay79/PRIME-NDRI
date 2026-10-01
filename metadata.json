@@ -1,0 +1,6 @@
+{
+  "name": "NDRI PRIME",
+  "description": "NDRI PRIME - Project Information Management and Evaluation System featuring multi-role proposal lifecycle, HOD and Joint Director reviews, IRC meeting decisions, ongoing progress reports, and completion tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
