@@ -62,6 +62,16 @@ $stmt = $db->prepare("SELECT p.*, u.name as scientist_name
 $stmt->execute([$deptId]);
 $recentProposals = $stmt->fetchAll();
 
+// HOD's own research submissions (forwarded directly to Joint Director)
+$stmtMy = $db->prepare("SELECT p.*, d.department_name, d.department_code
+                        FROM proposals p
+                        LEFT JOIN departments d ON p.department_id = d.id
+                        WHERE p.scientist_id = ?
+                        ORDER BY p.updated_at DESC LIMIT 5");
+$stmtMy->execute([$user['id']]);
+$mySubmissions = $stmtMy->fetchAll();
+$mySubmissionsCount = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE scientist_id = " . (int)$user['id'])->fetchColumn();
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -70,15 +80,24 @@ include __DIR__ . '/../includes/header.php';
         <h3 class="fw-bold mb-1 text-dark">Department Review Portal (HOD)</h3>
         <p class="text-muted small mb-0">
             Division: <strong><?= e($department['department_name'] ?? 'Department') ?> (<?= e($department['department_code'] ?? 'NDRI') ?>)</strong> |
-            Review, evaluate and endorse departmental research submissions
+            Review departmental submissions & submit your own research proposals directly to Joint Director
         </p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex flex-wrap gap-2">
+        <a href="<?= url("/scientist/create-proposal.php") ?>" class="btn btn-success btn-sm shadow-sm">
+            <i class="bi bi-file-earmark-plus me-1"></i> + New Proposal
+        </a>
+        <a href="<?= url("/scientist/ongoing-projects.php") ?>" class="btn btn-outline-primary btn-sm shadow-sm bg-white">
+            <i class="bi bi-arrow-repeat me-1"></i> On Going Projects
+        </a>
+        <a href="<?= url("/scientist/create-completed-proposal.php") ?>" class="btn btn-outline-secondary btn-sm shadow-sm bg-white">
+            <i class="bi bi-check2-circle me-1"></i> Completion Project
+        </a>
         <a href="<?= url("/hod/proposals.php") ?>" class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-collection me-1"></i> All Department Proposals
+            <i class="bi bi-collection me-1"></i> All Dept Proposals
         </a>
         <a href="<?= url("/hod/projects.php") ?>" class="btn btn-primary btn-sm" style="background-color: #1a365d; border-color: #1a365d;">
-            <i class="bi bi-kanban me-1"></i> Department Projects & Reports
+            <i class="bi bi-kanban me-1"></i> Dept Projects & Reports
         </a>
     </div>
 </div>
@@ -159,6 +178,64 @@ include __DIR__ . '/../includes/header.php';
                 <small class="text-success"><i class="bi bi-arrow-right-short me-1"></i>View Projects & Reports</small>
             </div>
         </a>
+    </div>
+</div>
+
+<!-- HOD Self-Research Submissions Hub (Direct to Joint Director) -->
+<div class="card shadow-sm border-0 mb-4" style="background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%); border-left: 4px solid #1a365d !important;">
+    <div class="card-body p-3 p-md-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="badge bg-primary text-white" style="background-color: #1a365d !important;"><i class="bi bi-person-workspace me-1"></i>HOD Research Portal</span>
+                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle font-monospace"><i class="bi bi-send-check me-1"></i>Direct Submission to Joint Director</span>
+                </div>
+                <h5 class="fw-bold text-dark mb-1">Your Personal Research Submissions (PI / Co-PI)</h5>
+                <p class="text-muted small mb-0" style="max-width: 720px;">
+                    As Head of Department, your research submissions (New Proposals, Ongoing Progress Reports, and Project Completions) are automatically routed <strong>directly to the Joint Director (Research)</strong> for screening and IRC approval.
+                </p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= url("/scientist/create-proposal.php") ?>" class="btn btn-primary btn-sm fw-semibold" style="background-color: #1a365d; border-color: #1a365d;">
+                    <i class="bi bi-file-earmark-plus me-1"></i> Submit New Proposal
+                </a>
+                <a href="<?= url("/scientist/ongoing-projects.php") ?>" class="btn btn-outline-primary btn-sm bg-white fw-semibold">
+                    <i class="bi bi-arrow-repeat me-1"></i> Submit Ongoing Report
+                </a>
+                <a href="<?= url("/scientist/create-completed-proposal.php") ?>" class="btn btn-outline-dark btn-sm bg-white fw-semibold">
+                    <i class="bi bi-check2-circle me-1"></i> Submit Completion
+                </a>
+                <a href="<?= url("/scientist/proposals.php") ?>" class="btn btn-secondary btn-sm fw-semibold">
+                    <i class="bi bi-folder2-open me-1"></i> My Submissions (<?= $mySubmissionsCount ?>)
+                </a>
+            </div>
+        </div>
+
+        <?php if (!empty($mySubmissions)): ?>
+            <div class="mt-3 pt-3 border-top">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-uppercase fw-bold text-secondary" style="font-size: 0.75rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-clock-history me-1"></i> Your Recent Submissions Sent to Directorate:
+                    </small>
+                    <a href="<?= url("/scientist/proposals.php") ?>" class="extra-small text-decoration-none">View All Submissions &rarr;</a>
+                </div>
+                <div class="list-group list-group-flush rounded bg-white border">
+                    <?php foreach ($mySubmissions as $myP): ?>
+                        <div class="list-group-item px-3 py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-grow-1">
+                                <?= render_proposal_category_badge($myP['proposal_category'] ?? 'new') ?>
+                                <span class="font-monospace fw-semibold small text-primary"><?= e($myP['proposal_number']) ?></span>
+                                <span class="text-dark fw-semibold small text-truncate" style="max-width: 420px;"><?= e($myP['title']) ?></span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <?= render_status_badge($myP['current_status']) ?>
+                                <a href="<?= url("/scientist/proposal-details.php?id=" . $myP['id']) ?>" class="btn btn-xs btn-outline-primary">View</a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 

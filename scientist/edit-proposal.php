@@ -9,7 +9,11 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/permissions.php';
 
-require_role(ROLE_SCIENTIST);
+require_role([ROLE_SCIENTIST, ROLE_HOD]);
+
+$currentUser = current_user();
+$userId = current_user_id();
+$isHod = (current_user_role_id() === ROLE_HOD);
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id <= 0) {
@@ -229,13 +233,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $prevStatus = $proposal['current_status'];
             $newStatus = $prevStatus;
 
-            if ($submissionAction === 'resubmit') {
-                // If returned by HOD or Draft -> Submitted to HOD
-                // If returned by JD -> Submitted to HOD (as per governance so HOD re-verifies modifications)
-                $newStatus = STATUS_SUBMITTED_HOD;
+            if ($submissionAction === 'resubmit' || $submissionAction === 'submit') {
+                // If submitter is HOD, their submission goes directly to Joint Director
+                if ($isHod) {
+                    $newStatus = STATUS_FORWARDED_JD;
+                } else {
+                    $newStatus = STATUS_SUBMITTED_HOD;
+                }
             } elseif ($prevStatus === STATUS_SUBMITTED_HOD) {
                 // Remains submitted to HOD so HOD reviews the latest edited version
                 $newStatus = STATUS_SUBMITTED_HOD;
+            } elseif ($prevStatus === STATUS_FORWARDED_JD && $isHod) {
+                // HOD updating while under Joint Director review
+                $newStatus = STATUS_FORWARDED_JD;
             }
 
             $submissionRemarksToSave = !empty($resubmitRemarks) ? $resubmitRemarks : ($proposal['submission_remarks'] ?? null);
@@ -290,14 +300,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // Record status change, comments and audit log
-            if ($submissionAction === 'resubmit') {
-                $histComment = "Proposal revised and resubmitted by Scientist.";
+            if ($submissionAction === 'resubmit' || $submissionAction === 'submit') {
+                $submitterRole = $isHod ? 'Head of Department' : 'Scientist';
+                $histComment = $isHod 
+                    ? "Proposal revised and resubmitted by Head of Department directly to Joint Director for approval."
+                    : "Proposal revised and resubmitted by Scientist.";
                 if (!empty($resubmitRemarks)) {
                     $histComment .= " Remarks: " . $resubmitRemarks;
-                    add_proposal_comment($id, $userId, 'Scientist Resubmission', $resubmitRemarks);
+                    add_proposal_comment($id, $userId, ($isHod ? 'HOD Resubmission' : 'Scientist Resubmission'), $resubmitRemarks);
                 }
                 record_status_history($id, $prevStatus, $newStatus, $userId, $currentUser['role_name'], $histComment);
-                log_audit($userId, 'PROPOSAL_RESUBMITTED', 'proposals', $id, "Proposal {$proposal['proposal_number']} resubmitted by Scientist.");
+                log_audit($userId, 'PROPOSAL_RESUBMITTED', 'proposals', $id, "Proposal {$proposal['proposal_number']} resubmitted by {$submitterRole}.");
+            } elseif ($prevStatus === STATUS_FORWARDED_JD && $isHod) {
+                $histComment = "Proposal updated with revisions by Head of Department while pending Joint Director review.";
+                if (!empty($resubmitRemarks)) {
+                    $histComment .= " Remarks: " . $resubmitRemarks;
+                    add_proposal_comment($id, $userId, 'HOD Update', $resubmitRemarks);
+                }
+                record_status_history($id, $prevStatus, $newStatus, $userId, $currentUser['role_name'], $histComment);
+                log_audit($userId, 'PROPOSAL_UPDATED_UNDER_JD', 'proposals', $id, "Proposal {$proposal['proposal_number']} updated by HOD while under review by Joint Director.");
             } elseif ($prevStatus === STATUS_SUBMITTED_HOD) {
                 $histComment = "Proposal updated with revisions by Scientist while pending HOD review.";
                 if (!empty($resubmitRemarks)) {
@@ -308,15 +329,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 log_audit($userId, 'PROPOSAL_UPDATED_UNDER_HOD', 'proposals', $id, "Proposal {$proposal['proposal_number']} updated by Scientist while under review by HOD.");
             } else {
                 if (!empty($resubmitRemarks)) {
-                    add_proposal_comment($id, $userId, 'Scientist Note', $resubmitRemarks);
+                    add_proposal_comment($id, $userId, ($isHod ? 'HOD Note' : 'Scientist Note'), $resubmitRemarks);
                 }
                 log_audit($userId, 'PROPOSAL_UPDATED', 'proposals', $id, "Proposal {$proposal['proposal_number']} updated as {$newStatus}.");
             }
 
             $db->commit();
 
-            if ($submissionAction === 'resubmit') {
-                flash('success', "Proposal {$proposal['proposal_number']} has been successfully resubmitted to Head of Department for review.");
+            if ($submissionAction === 'resubmit' || $submissionAction === 'submit') {
+                if ($isHod) {
+                    flash('success', "Proposal {$proposal['proposal_number']} has been successfully submitted directly to Joint Director for review.");
+                } else {
+                    flash('success', "Proposal {$proposal['proposal_number']} has been successfully resubmitted to Head of Department for review.");
+                }
+            } elseif ($prevStatus === STATUS_FORWARDED_JD && $isHod) {
+                flash('success', "Proposal {$proposal['proposal_number']} was successfully updated and remains submitted to Joint Director for review.");
             } elseif ($prevStatus === STATUS_SUBMITTED_HOD) {
                 flash('success', "Proposal {$proposal['proposal_number']} was successfully updated and remains submitted to Head of Department for review.");
             } else {
@@ -876,11 +903,11 @@ include __DIR__ . '/../includes/header.php';
     <?php else: ?>
         <div class="detail-section-card">
             <div class="detail-section-header">
-                <i class="bi bi-chat-left-text text-primary"></i> Scientist's Submission Remarks / Note for Reviewers
+                <i class="bi bi-chat-left-text text-primary"></i> <?= $isHod ? "HOD's Submission Remarks / Note for Joint Director" : "Scientist's Submission Remarks / Note for Reviewers" ?>
             </div>
             <div class="detail-section-body">
-                <label class="form-label small fw-semibold text-secondary">Optional Remarks / Note for HOD & Directorate</label>
-                <textarea name="resubmit_remarks" class="form-control" rows="2" placeholder="Any specific context, priority highlights, or note for the Head of Department..."><?= e($proposal['submission_remarks'] ?? '') ?></textarea>
+                <label class="form-label small fw-semibold text-secondary">Optional Remarks / Note for <?= $isHod ? 'Joint Director' : 'HOD & Directorate' ?></label>
+                <textarea name="resubmit_remarks" class="form-control" rows="2" placeholder="<?= $isHod ? 'Any specific context, priority highlights, or note for the Joint Director...' : 'Any specific context, priority highlights, or note for the Head of Department...' ?>"><?= e($proposal['submission_remarks'] ?? '') ?></textarea>
             </div>
         </div>
     <?php endif; ?>
@@ -894,12 +921,16 @@ include __DIR__ . '/../includes/header.php';
                     <button type="submit" name="submit_action" value="update_submitted" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Are you sure you want to save updates to this proposal?">
                         <i class="bi bi-check2-circle me-1"></i> Save Updates (Keep with HOD)
                     </button>
+                <?php elseif ($proposal['current_status'] === STATUS_FORWARDED_JD && $isHod): ?>
+                    <button type="submit" name="submit_action" value="update_submitted" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Are you sure you want to save updates to this proposal?">
+                        <i class="bi bi-check2-circle me-1"></i> Save Updates (Keep with Joint Director)
+                    </button>
                 <?php else: ?>
                     <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="window.isDraftAction = true;">
                         <i class="bi bi-save me-1"></i> Save Changes (Draft)
                     </button>
-                    <button type="submit" name="submit_action" value="resubmit" class="btn btn-success fw-semibold px-4" data-confirm="Are you sure you want to resubmit this proposal to the Head of Department?" onclick="window.isDraftAction = false;">
-                        <i class="bi bi-send-check me-1"></i> Resubmit Proposal to HOD
+                    <button type="submit" name="submit_action" value="resubmit" class="btn btn-success fw-semibold px-4" data-confirm="Are you sure you want to <?= $isHod ? 'submit this proposal directly to the Joint Director' : 'resubmit this proposal to the Head of Department' ?>?" onclick="window.isDraftAction = false;">
+                        <i class="bi bi-send-check me-1"></i> <?= $isHod ? 'Submit Proposal to Joint Director' : 'Resubmit Proposal to HOD' ?>
                     </button>
                 <?php endif; ?>
             </div>

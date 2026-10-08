@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="gov-header py-3 px-4 shadow-sm">
     <div class="container-fluid d-flex align-items-center justify-content-between">
         <a href="<?= url("/login.php") ?>" class="gov-brand">
-            <div class="gov-logo-badge">PRIME</div>
+            <div class="gov-logo-badge" style="width: 70px; min-width: 70px;">PRIME</div>
             <div class="fw-bold fs-5 text-white">NDRI PRIME</div>
         </a>
     </div>

@@ -9,10 +9,12 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/permissions.php';
 
-require_role(ROLE_SCIENTIST);
+require_role([ROLE_SCIENTIST, ROLE_HOD]);
 
-$pageTitle = 'My Proposals';
+$currentUser = current_user();
 $userId = current_user_id();
+$isHod = (current_user_role_id() === ROLE_HOD);
+$pageTitle = $isHod ? 'My Submissions' : 'My Proposals';
 $db = get_db();
 
 $search = sanitize($_GET['q'] ?? '');
@@ -75,8 +77,8 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
     <div>
-        <h3 class="fw-bold mb-1 text-dark">My Research Proposals</h3>
-        <p class="text-muted small mb-0">Track lifecycle stage, review feedback, and submit new, ongoing, or completion projects</p>
+        <h3 class="fw-bold mb-1 text-dark"><?= $isHod ? 'My Research Submissions' : 'My Research Proposals' ?></h3>
+        <p class="text-muted small mb-0"><?= $isHod ? 'Track your personal research submissions forwarded directly to the Joint Director for approval' : 'Track lifecycle stage, review feedback, and submit new, ongoing, or completion projects' ?></p>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a href="<?= url("/scientist/create-proposal.php") ?>" class="btn btn-primary shadow-sm" style="background-color: #1a365d; border-color: #1a365d;">

@@ -8,7 +8,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-require_role(ROLE_SCIENTIST);
+require_role([ROLE_SCIENTIST, ROLE_HOD]);
 
 $projectId = isset($_GET['project_id']) ? (int)$_GET['project_id'] : 0;
 $redirectUrl = $projectId > 0 

@@ -77,6 +77,23 @@ if ($roleId === ROLE_SCIENTIST) {
                 <i class="bi bi-kanban"></i> Department Projects
             </a>
 
+            <div class="sidebar-heading">HOD Research Submissions</div>
+            <a href="<?= url('/scientist/create-proposal.php') ?>" class="nav-link-custom <?= (str_contains($currentScript, 'create-proposal') && !str_contains($currentScript, 'completed')) ? 'active' : '' ?>">
+                <i class="bi bi-file-earmark-plus"></i> New Proposal
+            </a>
+            <a href="<?= url('/scientist/ongoing-projects.php') ?>" class="nav-link-custom <?= str_contains($currentScript, 'ongoing-projects') ? 'active' : '' ?>">
+                <i class="bi bi-arrow-repeat"></i> On Going Projects
+            </a>
+            <a href="<?= url('/scientist/create-completed-proposal.php') ?>" class="nav-link-custom <?= str_contains($currentScript, 'create-completed-proposal') ? 'active' : '' ?>">
+                <i class="bi bi-check2-circle"></i> Completion Project
+            </a>
+            <a href="<?= url('/scientist/proposals.php') ?>" class="nav-link-custom <?= (str_contains($currentScript, 'scientist/proposals') || str_contains($currentScript, 'proposal-details')) ? 'active' : '' ?>">
+                <i class="bi bi-folder2-open"></i> My Submissions
+            </a>
+            <a href="<?= url('/scientist/projects.php') ?>" class="nav-link-custom <?= str_contains($currentScript, 'scientist/projects') ? 'active' : '' ?>">
+                <i class="bi bi-kanban"></i> My Active Projects
+            </a>
+
         <?php elseif ($roleId === ROLE_JOINT_DIRECTOR): ?>
             <div class="sidebar-heading">Directorate Portal</div>
             <a href="<?= url('/joint-director/dashboard.php') ?>" class="nav-link-custom <?= str_contains($currentScript, 'joint-director/dashboard') ? 'active' : '' ?>">
@@ -143,6 +160,12 @@ if ($roleId === ROLE_SCIENTIST) {
                 <a href="<?= url('/hod/dashboard.php') ?>" class="nav-link-custom"><i class="bi bi-speedometer2"></i> HOD Dashboard</a>
                 <a href="<?= url('/hod/proposals.php') ?>" class="nav-link-custom"><i class="bi bi-inbox"></i> Review Proposals</a>
                 <a href="<?= url('/hod/projects.php') ?>" class="nav-link-custom"><i class="bi bi-kanban"></i> Department Projects</a>
+                <div class="border-top my-2 pt-2 small text-uppercase text-muted px-3 fw-bold" style="font-size: 0.7rem;">HOD Research Submissions</div>
+                <a href="<?= url('/scientist/create-proposal.php') ?>" class="nav-link-custom"><i class="bi bi-file-earmark-plus"></i> New Proposal</a>
+                <a href="<?= url('/scientist/ongoing-projects.php') ?>" class="nav-link-custom"><i class="bi bi-arrow-repeat"></i> On Going Projects</a>
+                <a href="<?= url('/scientist/create-completed-proposal.php') ?>" class="nav-link-custom"><i class="bi bi-check2-circle"></i> Completion Project</a>
+                <a href="<?= url('/scientist/proposals.php') ?>" class="nav-link-custom"><i class="bi bi-folder2-open"></i> My Submissions</a>
+                <a href="<?= url('/scientist/projects.php') ?>" class="nav-link-custom"><i class="bi bi-kanban"></i> My Active Projects</a>
             <?php elseif ($roleId === ROLE_JOINT_DIRECTOR): ?>
                 <a href="<?= url('/joint-director/dashboard.php') ?>" class="nav-link-custom"><i class="bi bi-speedometer2"></i> Executive Dashboard</a>
                 <a href="<?= url('/joint-director/users.php') ?>" class="nav-link-custom d-flex justify-content-between align-items-center">

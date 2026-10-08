@@ -8,29 +8,51 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-require_role(ROLE_SCIENTIST);
+require_role([ROLE_SCIENTIST, ROLE_HOD]);
 
-$pageTitle = 'My Research Projects';
+$currentUser = current_user();
 $userId = current_user_id();
+$isHod = (current_user_role_id() === ROLE_HOD);
+$pageTitle = $isHod ? 'My Research Projects' : 'My Research Projects';
 $db = get_db();
 
-$stmt = $db->prepare("SELECT pr.*, p.title as proposal_title, p.institute_priority_area, p.proposed_budget,
-                             p.project_type as prop_project_type, p.funding_agency as prop_funding_agency,
-                             p.funding_agency_type as prop_funding_agency_type, p.yearly_budget as prop_yearly_budget,
-                             d.department_name, d.department_code,
-                             (SELECT COUNT(*) FROM progress_reports r WHERE r.project_id = pr.id) as reports_count,
-                             (SELECT MAX(submitted_at) FROM progress_reports r WHERE r.project_id = pr.id) as latest_report_date,
-                             (SELECT COALESCE(SUM(COALESCE(budget_utilized, budget_utilization, 0)), 0) FROM progress_reports r WHERE r.project_id = pr.id) as total_expenditure,
-                             (SELECT COUNT(*) FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '')) as feedback_count,
-                             (SELECT r.reviewer_comments FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_feedback,
-                             (SELECT r.reviewer_role FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_reviewer_role,
-                             (SELECT r.review_status FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_review_status
-                      FROM projects pr
-                      JOIN proposals p ON pr.proposal_id = p.id
-                      JOIN departments d ON COALESCE(pr.department_id, p.department_id) = d.id
-                      WHERE pr.scientist_id = ?
-                      ORDER BY pr.created_at DESC");
-$stmt->execute([$userId]);
+if ($isHod) {
+    $stmt = $db->prepare("SELECT pr.*, p.title as proposal_title, p.institute_priority_area, p.proposed_budget,
+                                 p.project_type as prop_project_type, p.funding_agency as prop_funding_agency,
+                                 p.funding_agency_type as prop_funding_agency_type, p.yearly_budget as prop_yearly_budget,
+                                 d.department_name, d.department_code,
+                                 (SELECT COUNT(*) FROM progress_reports r WHERE r.project_id = pr.id) as reports_count,
+                                 (SELECT MAX(submitted_at) FROM progress_reports r WHERE r.project_id = pr.id) as latest_report_date,
+                                 (SELECT COALESCE(SUM(COALESCE(budget_utilized, budget_utilization, 0)), 0) FROM progress_reports r WHERE r.project_id = pr.id) as total_expenditure,
+                                 (SELECT COUNT(*) FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '')) as feedback_count,
+                                 (SELECT r.reviewer_comments FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_feedback,
+                                 (SELECT r.reviewer_role FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_reviewer_role,
+                                 (SELECT r.review_status FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_review_status
+                          FROM projects pr
+                          JOIN proposals p ON pr.proposal_id = p.id
+                          JOIN departments d ON COALESCE(pr.department_id, p.department_id) = d.id
+                          WHERE (pr.scientist_id = ? OR pr.department_id = ?)
+                          ORDER BY pr.created_at DESC");
+    $stmt->execute([$userId, (int)($currentUser['department_id'] ?? 1)]);
+} else {
+    $stmt = $db->prepare("SELECT pr.*, p.title as proposal_title, p.institute_priority_area, p.proposed_budget,
+                                 p.project_type as prop_project_type, p.funding_agency as prop_funding_agency,
+                                 p.funding_agency_type as prop_funding_agency_type, p.yearly_budget as prop_yearly_budget,
+                                 d.department_name, d.department_code,
+                                 (SELECT COUNT(*) FROM progress_reports r WHERE r.project_id = pr.id) as reports_count,
+                                 (SELECT MAX(submitted_at) FROM progress_reports r WHERE r.project_id = pr.id) as latest_report_date,
+                                 (SELECT COALESCE(SUM(COALESCE(budget_utilized, budget_utilization, 0)), 0) FROM progress_reports r WHERE r.project_id = pr.id) as total_expenditure,
+                                 (SELECT COUNT(*) FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '')) as feedback_count,
+                                 (SELECT r.reviewer_comments FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_feedback,
+                                 (SELECT r.reviewer_role FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_reviewer_role,
+                                 (SELECT r.review_status FROM progress_reports r WHERE r.project_id = pr.id AND (r.reviewer_comments IS NOT NULL AND TRIM(r.reviewer_comments) != '') ORDER BY COALESCE(r.reviewed_at, r.updated_at, r.id) DESC LIMIT 1) as latest_review_status
+                          FROM projects pr
+                          JOIN proposals p ON pr.proposal_id = p.id
+                          JOIN departments d ON COALESCE(pr.department_id, p.department_id) = d.id
+                          WHERE pr.scientist_id = ?
+                          ORDER BY pr.created_at DESC");
+    $stmt->execute([$userId]);
+}
 $projects = $stmt->fetchAll();
 
 include __DIR__ . '/../includes/header.php';

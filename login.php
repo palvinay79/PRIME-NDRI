@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="gov-header py-3 px-4 shadow-sm">
     <div class="container-fluid d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center gap-3">
-            <div class="gov-logo-badge">PRIME</div>
+            <div class="gov-logo-badge" style="width: 70px; min-width: 70px;">PRIME</div>
             <div>
                 <h4 class="m-0 text-white fw-bold">NDRI PRIME</h4>
                 <small class="text-white-50">Project Information Management and Evaluation System</small>

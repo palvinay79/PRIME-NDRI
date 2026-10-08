@@ -8,11 +8,12 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-require_role(ROLE_SCIENTIST);
+require_role([ROLE_SCIENTIST, ROLE_HOD]);
 
 $pageTitle = 'Create New Research Proposal';
 $currentUser = current_user();
 $userId = current_user_id();
+$isHod = (current_user_role_id() === ROLE_HOD);
 $db = get_db();
 
 // Fetch department
@@ -47,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
 
     $submissionAction = $_POST['submit_action'] ?? 'draft'; // 'draft' or 'submit'
-    $targetStatus = ($submissionAction === 'submit') ? STATUS_SUBMITTED_HOD : STATUS_DRAFT;
+    $targetStatus = ($submissionAction === 'submit') ? ($isHod ? STATUS_FORWARDED_JD : STATUS_SUBMITTED_HOD) : STATUS_DRAFT;
 
     $projectType = sanitize($_POST['project_type'] ?? '');
     $fundingAgency = trim(sanitize($_POST['funding_agency'] ?? ''));
@@ -253,7 +254,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // Record Status History
-            $historyComment = ($submissionAction === 'submit') ? 'Initial submission sent to Head of Department for review.' : 'Proposal saved as draft.';
+            $historyComment = ($submissionAction === 'submit') 
+                ? ($isHod ? 'Initial submission by Head of Department forwarded directly to Joint Director for screening.' : 'Initial submission sent to Head of Department for review.') 
+                : 'Proposal saved as draft.';
             if (!empty($submissionRemarks)) {
                 $historyComment .= " Remarks: " . $submissionRemarks;
             }
@@ -265,7 +268,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->commit();
 
             if ($submissionAction === 'submit') {
-                flash('success', "Proposal {$proposalNumber} submitted successfully to Head of Department.");
+                if ($isHod) {
+                    flash('success', "Proposal {$proposalNumber} submitted successfully and forwarded directly to Joint Director for review.");
+                } else {
+                    flash('success', "Proposal {$proposalNumber} submitted successfully to Head of Department.");
+                }
             } else {
                 flash('info', "Proposal {$proposalNumber} saved as draft.");
             }
@@ -782,25 +789,25 @@ include __DIR__ . '/../includes/header.php';
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white py-3 border-bottom d-flex align-items-center">
             <i class="bi bi-chat-left-quote text-primary me-2 fs-5"></i>
-            <h6 class="fw-bold text-dark m-0">Scientist's Submission Remarks / Note for Reviewers (HOD & Directorate)</h6>
+            <h6 class="fw-bold text-dark m-0"><?= $isHod ? "Head of Department's Submission Remarks / Note for Directorate" : "Scientist's Submission Remarks / Note for Reviewers (HOD & Directorate)" ?></h6>
         </div>
         <div class="card-body">
-            <label class="form-label small fw-semibold text-secondary">Optional Remarks / Covering Note for Head of Department</label>
-            <textarea name="submission_remarks" class="form-control" rows="2" placeholder="Provide any special context, urgent operational priorities, or notes for the Head of Department and Joint Director..."><?= e($_POST['submission_remarks'] ?? '') ?></textarea>
-            <div class="form-text extra-small text-muted">These comments and remarks will be prominently visible to the HOD when screening and reviewing your submission.</div>
+            <label class="form-label small fw-semibold text-secondary"><?= $isHod ? "Remarks / Covering Note for Joint Director" : "Optional Remarks / Covering Note for Head of Department" ?></label>
+            <textarea name="submission_remarks" class="form-control" rows="2" placeholder="Provide any special context, urgent operational priorities, or notes for review..."><?= e($_POST['submission_remarks'] ?? '') ?></textarea>
+            <div class="form-text extra-small text-muted">These comments and remarks will be prominently visible when screening and reviewing your submission.</div>
         </div>
     </div>
 
     <!-- Submission Action Buttons -->
     <div class="card shadow-sm border-0 mb-5">
         <div class="card-body d-flex justify-content-between align-items-center">
-            <a href="<?= url("/scientist/proposals.php") ?>" class="btn btn-outline-secondary">Cancel</a>
+            <a href="<?= $isHod ? url("/hod/dashboard.php") : url("/scientist/proposals.php") ?>" class="btn btn-outline-secondary">Cancel</a>
             <div class="d-flex gap-2">
                 <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="window.isDraftAction = true;">
                     <i class="bi bi-save me-1"></i> Save as Draft
                 </button>
                 <button type="submit" name="submit_action" value="submit" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" onclick="window.isDraftAction = false;">
-                    <i class="bi bi-send-check me-1"></i> Submit to HOD
+                    <i class="bi bi-send-check me-1"></i> <?= $isHod ? 'Submit to Joint Director' : 'Submit to HOD' ?>
                 </button>
             </div>
         </div>

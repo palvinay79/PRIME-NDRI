@@ -23,28 +23,36 @@ function can_edit_proposal(array $proposal, ?int $userId = null): bool {
     }
 
     // Editable in Draft, Submitted to HOD (prior to HOD action), or Returned states
+    // For HOD, they can also edit their own submission in Forwarded to Joint Director before JD action
+    $userRole = current_user_role_id();
     $editableStatuses = [
         STATUS_DRAFT,
         STATUS_SUBMITTED_HOD,
         STATUS_RETURNED_HOD,
         STATUS_RETURNED_JD
     ];
+    if ($userRole === ROLE_HOD) {
+        $editableStatuses[] = STATUS_FORWARDED_JD;
+    }
 
     if (!in_array($proposal['current_status'], $editableStatuses, true)) {
         return false;
     }
 
     // If ongoing progress report proposal:
-    // Once HOD submits to Joint Director or once approved by IRC / ICR, scientist cannot edit
+    // Once approved by IRC / ICR (or for scientists, once HOD forwards to JD), cannot edit
     if (($proposal['proposal_category'] ?? '') === 'ongoing') {
-        if (in_array($proposal['current_status'], [
-            STATUS_FORWARDED_JD,
+        $lockedStatuses = [
             STATUS_APPROVED_IRC,
             STATUS_APPROVED_IRC_MEETING,
             STATUS_PENDING_IRC,
             STATUS_APPROVED_ACTIVE,
             STATUS_COMPLETED
-        ], true)) {
+        ];
+        if ($userRole !== ROLE_HOD) {
+            $lockedStatuses[] = STATUS_FORWARDED_JD;
+        }
+        if (in_array($proposal['current_status'], $lockedStatuses, true)) {
             return false;
         }
 
@@ -91,15 +99,17 @@ function can_delete_proposal(array $proposal, ?int $userId = null): bool {
         return false;
     }
 
-    // For Scientist (owner): can delete ONLY until HOD takes action.
-    // Allowed statuses: Draft, Submitted to HOD.
-    // Once HOD forwards to Joint Director (STATUS_FORWARDED_JD) or takes any action, deletion is prohibited.
+    // For Scientist or HOD (owner): can delete ONLY until approval action is taken.
+    // Allowed statuses: Draft, Submitted to HOD (for scientists), Forwarded to JD (for HODs).
     if ($userRole === ROLE_SCIENTIST || ($isOwner && $userRole !== ROLE_JOINT_DIRECTOR)) {
-        $scientistDeletable = [
+        $ownerDeletable = [
             STATUS_DRAFT,
             STATUS_SUBMITTED_HOD,
         ];
-        if (!in_array($proposal['current_status'] ?? '', $scientistDeletable, true)) {
+        if ($userRole === ROLE_HOD) {
+            $ownerDeletable[] = STATUS_FORWARDED_JD;
+        }
+        if (!in_array($proposal['current_status'] ?? '', $ownerDeletable, true)) {
             return false;
         }
 
@@ -498,12 +508,17 @@ function can_view_proposal(array $proposal): bool {
         return true;
     }
 
+    // Owner can always view their proposal
+    if ($userId && (int)($proposal['scientist_id'] ?? 0) === (int)$userId) {
+        return true;
+    }
+
     if ($roleId === ROLE_HOD) {
-        return (int)$proposal['department_id'] === (int)$deptId;
+        return (int)($proposal['department_id'] ?? 0) === (int)$deptId;
     }
 
     if ($roleId === ROLE_SCIENTIST) {
-        return (int)$proposal['scientist_id'] === (int)$userId;
+        return (int)($proposal['scientist_id'] ?? 0) === (int)$userId;
     }
 
     return false;

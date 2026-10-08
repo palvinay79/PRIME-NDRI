@@ -9,11 +9,12 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-require_role(ROLE_SCIENTIST);
+require_role([ROLE_SCIENTIST, ROLE_HOD]);
 
 $pageTitle = 'Completion Project';
 $currentUser = current_user();
 $userId = current_user_id();
+$isHod = (current_user_role_id() === ROLE_HOD);
 $db = get_db();
 
 // Fetch department
@@ -25,19 +26,35 @@ $department = $stmt->fetch() ?: ['id' => 1, 'department_code' => 'AGB', 'departm
 $allDepts = $db->query("SELECT * FROM departments ORDER BY department_name ASC")->fetchAll();
 
 // Fetch active projects for this scientist from system DB
-$stmtActive = $db->prepare("
-    SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level, pr.objectives,
-           pr.funding_agency_type as prop_funding_agency_type, pr.yearly_budget as prop_yearly_budget,
-           d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
-    FROM projects p
-    LEFT JOIN proposals pr ON p.proposal_id = pr.id
-    LEFT JOIN departments d ON p.department_id = d.id
-    LEFT JOIN users u ON p.scientist_id = u.id
-    WHERE (p.scientist_id = ? OR p.id IN (SELECT project_id FROM progress_reports WHERE submitted_by = ?) OR p.proposal_id IN (SELECT proposal_id FROM proposal_co_pis WHERE email = ?))
-      AND p.project_status = 'Active'
-    ORDER BY p.id DESC
-");
-$stmtActive->execute([$userId, $userId, $currentUser['email'] ?? '']);
+if ($isHod) {
+    $stmtActive = $db->prepare("
+        SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level, pr.objectives,
+               pr.funding_agency_type as prop_funding_agency_type, pr.yearly_budget as prop_yearly_budget,
+               d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
+        FROM projects p
+        LEFT JOIN proposals pr ON p.proposal_id = pr.id
+        LEFT JOIN departments d ON p.department_id = d.id
+        LEFT JOIN users u ON p.scientist_id = u.id
+        WHERE (p.scientist_id = ? OR p.department_id = ? OR p.id IN (SELECT project_id FROM progress_reports WHERE submitted_by = ?) OR p.proposal_id IN (SELECT proposal_id FROM proposal_co_pis WHERE email = ?))
+          AND p.project_status = 'Active'
+        ORDER BY p.id DESC
+    ");
+    $stmtActive->execute([$userId, (int)($currentUser['department_id'] ?? 1), $userId, $currentUser['email'] ?? '']);
+} else {
+    $stmtActive = $db->prepare("
+        SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level, pr.objectives,
+               pr.funding_agency_type as prop_funding_agency_type, pr.yearly_budget as prop_yearly_budget,
+               d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
+        FROM projects p
+        LEFT JOIN proposals pr ON p.proposal_id = pr.id
+        LEFT JOIN departments d ON p.department_id = d.id
+        LEFT JOIN users u ON p.scientist_id = u.id
+        WHERE (p.scientist_id = ? OR p.id IN (SELECT project_id FROM progress_reports WHERE submitted_by = ?) OR p.proposal_id IN (SELECT proposal_id FROM proposal_co_pis WHERE email = ?))
+          AND p.project_status = 'Active'
+        ORDER BY p.id DESC
+    ");
+    $stmtActive->execute([$userId, $userId, $currentUser['email'] ?? '']);
+}
 $activeProjects = $stmtActive->fetchAll();
 
 foreach ($activeProjects as &$ap) {
@@ -146,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
 
     $submissionAction = $_POST['submit_action'] ?? 'draft'; // 'draft' or 'submit'
-    $targetStatus = ($submissionAction === 'submit') ? STATUS_SUBMITTED_HOD : STATUS_DRAFT;
+    $targetStatus = ($submissionAction === 'submit') ? ($isHod ? STATUS_FORWARDED_JD : STATUS_SUBMITTED_HOD) : STATUS_DRAFT;
 
     $linkedProjectId = (int)($_POST['linked_project_id'] ?? ($_POST['selected_db_project_id'] ?? 0));
     $dbProj = null;
@@ -410,9 +427,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Record Status History
             $historyComment = ($submissionAction === 'submit') 
-                ? "Completion Project dossier (Project Code: {$projectCode})" . ($extensionRequested ? " with duration extension / additional funds request" : "") . " submitted to Head of Department for review."
+                ? ($isHod
+                    ? "Completion Project dossier (Project Code: {$projectCode})" . ($extensionRequested ? " with duration extension / additional funds request" : "") . " submitted by Head of Department and forwarded directly to Joint Director for review."
+                    : "Completion Project dossier (Project Code: {$projectCode})" . ($extensionRequested ? " with duration extension / additional funds request" : "") . " submitted to Head of Department for review.")
                 : "Completion Project dossier draft saved.";
-            record_status_history($proposalId, null, $targetStatus, $userId, $currentUser['role_name'], $historyComment);
+            record_status_history($proposalId, null, $targetStatus, $userId, $currentUser['role_name'] ?? ($isHod ? 'Head of Department' : 'Scientist'), $historyComment);
 
             // Audit log
             log_audit($userId, ($submissionAction === 'submit' ? 'COMPLETED_PROPOSAL_SUBMITTED' : 'COMPLETED_PROPOSAL_DRAFT'), 'proposals', $proposalId, "Completion Project {$proposalNumber} (Code: {$projectCode}) created with status '{$targetStatus}'.");
@@ -420,7 +439,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->commit();
 
             if ($submissionAction === 'submit') {
-                flash('success', "Completion Project dossier ({$projectCode}) submitted successfully to Head of Department.");
+                if ($isHod) {
+                    flash('success', "Completion Project dossier ({$projectCode}) submitted successfully and forwarded directly to Joint Director for review.");
+                } else {
+                    flash('success', "Completion Project dossier ({$projectCode}) submitted successfully to Head of Department.");
+                }
             } else {
                 flash('info', "Completion Project dossier ({$projectCode}) saved as draft.");
             }
@@ -1064,29 +1087,29 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <!-- Scientist's Completion Remarks / Covering Note for HOD -->
+    <!-- Project Closeout Remarks / Covering Note -->
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white py-3 border-bottom d-flex align-items-center">
             <i class="bi bi-chat-left-quote text-primary me-2 fs-5"></i>
-            <h6 class="fw-bold text-dark m-0">Scientist's Project Closeout Remarks / Note for Reviewers (HOD & Directorate)</h6>
+            <h6 class="fw-bold text-dark m-0"><?= $isHod ? "HOD's Project Closeout Remarks / Note for Joint Director" : "Scientist's Project Closeout Remarks / Note for Reviewers (HOD & Directorate)" ?></h6>
         </div>
         <div class="card-body">
-            <label class="form-label small fw-semibold text-secondary">Optional Remarks / Closeout Note for Head of Department</label>
-            <textarea name="submission_remarks" class="form-control" rows="2" placeholder="Provide any concluding observations, institutional handover notes, or remarks for the Head of Department and Joint Director..."><?= e($submissionRemarks ?? '') ?></textarea>
-            <div class="form-text extra-small text-muted">These comments and remarks will be prominently visible to the HOD when screening and reviewing your completion report.</div>
+            <label class="form-label small fw-semibold text-secondary">Optional Remarks / Closeout Note for <?= $isHod ? 'Joint Director' : 'Head of Department' ?></label>
+            <textarea name="submission_remarks" class="form-control" rows="2" placeholder="<?= $isHod ? 'Provide any concluding observations, institutional handover notes, or remarks for the Joint Director...' : 'Provide any concluding observations, institutional handover notes, or remarks for the Head of Department and Joint Director...' ?>"><?= e($submissionRemarks ?? '') ?></textarea>
+            <div class="form-text extra-small text-muted">These comments and remarks will be prominently visible to the <?= $isHod ? 'Joint Director' : 'HOD' ?> when screening and reviewing your completion report.</div>
         </div>
     </div>
 
     <!-- Submission Actions -->
     <div class="card shadow-sm border-0 mb-5">
         <div class="card-body d-flex justify-content-between align-items-center">
-            <a href="<?= url("/scientist/proposals.php") ?>" class="btn btn-outline-secondary">Cancel</a>
+            <a href="<?= $isHod ? url("/hod/dashboard.php") : url("/scientist/proposals.php") ?>" class="btn btn-outline-secondary">Cancel</a>
             <div class="d-flex gap-2">
                 <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="window.isDraftAction = true;">
                     <i class="bi bi-save me-1"></i> Save as Draft
                 </button>
                 <button type="submit" name="submit_action" value="submit" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" id="submit_hod_btn" onclick="window.isDraftAction = false;">
-                    <i class="bi bi-send-check me-1"></i> Submit to HOD
+                    <i class="bi bi-send-check me-1"></i> <?= $isHod ? 'Submit to Joint Director' : 'Submit to HOD' ?>
                 </button>
             </div>
         </div>

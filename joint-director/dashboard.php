@@ -134,11 +134,11 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div>
                     <h6 class="text-dark fw-bold mb-0">
-                        Action Required: <?= $metrics['pending_jd'] ?> Submission<?= $metrics['pending_jd'] > 1 ? 's' : '' ?> Endorsed by HOD Awaiting Joint Director Screening
+                        Action Required: <?= $metrics['pending_jd'] ?> Submission<?= $metrics['pending_jd'] > 1 ? 's' : '' ?> Awaiting Joint Director Screening
                     </h6>
                     <div class="small text-dark mt-1">
-                        <i class="bi bi-person-check-fill text-success me-1"></i>Approved & Endorsed by Head of Department: 
-                        <span class="badge bg-dark text-white px-2 py-1 fs-6 fw-bold"><?= e(implode(' &bull; ', $approvingHods)) ?></span>
+                        <i class="bi bi-person-check-fill text-success me-1"></i>Endorsed / Submitted by Head of Department: 
+                        <span class="badge bg-dark text-white px-2 py-1 fs-6 fw-bold"><?= !empty($approvingHods) ? e(implode(' &bull; ', $approvingHods)) : 'Head of Department' ?></span>
                     </div>
                 </div>
             </div>
@@ -177,9 +177,15 @@ include __DIR__ . '/../includes/header.php';
                             <span class="badge bg-light text-secondary border extra-small"><?= e($p['scientist_name']) ?></span>
                         </div>
                         <div class="d-flex flex-wrap align-items-center gap-2">
-                            <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle font-monospace py-1 px-2" style="font-size: 0.75rem;">
-                                <i class="bi bi-person-check-fill text-success me-1"></i>Approved by HOD: <strong><?= e($p['hod_approver_name']) ?></strong> (<?= e($p['department_code']) ?>)
-                            </span>
+                            <?php if ($p['hod_approver_name'] === $p['scientist_name']): ?>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace py-1 px-2" style="font-size: 0.75rem;">
+                                    <i class="bi bi-send-check text-primary me-1"></i>Direct Submission by HOD: <strong><?= e($p['hod_approver_name']) ?></strong> (<?= e($p['department_code']) ?>)
+                                </span>
+                            <?php else: ?>
+                                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle font-monospace py-1 px-2" style="font-size: 0.75rem;">
+                                    <i class="bi bi-person-check-fill text-success me-1"></i>Approved by HOD: <strong><?= e($p['hod_approver_name']) ?></strong> (<?= e($p['department_code']) ?>)
+                                </span>
+                            <?php endif; ?>
                             <?php if (!empty($p['hod_approved_at'])): ?>
                                 <small class="text-muted" style="font-size: 0.7rem;"><i class="bi bi-clock me-1"></i><?= format_date($p['hod_approved_at'], 'd M Y') ?></small>
                             <?php endif; ?>
@@ -380,9 +386,15 @@ include __DIR__ . '/../includes/header.php';
                                 <strong class="small text-dark d-block"><i class="bi bi-person me-1"></i><?= e($p['scientist_name']) ?></strong>
                                 <small class="text-muted d-block"><?= e($p['department_code']) ?> &bull; <?= e($p['department_name']) ?></small>
                                 <div class="mt-1">
-                                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle font-monospace" style="font-size: 0.68rem;">
-                                        <i class="bi bi-person-check-fill me-1"></i>HOD: <?= e($p['hod_approver_name']) ?>
-                                    </span>
+                                    <?php if ($p['hod_approver_name'] === $p['scientist_name']): ?>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.68rem;">
+                                            <i class="bi bi-send-check me-1"></i>Direct HOD Submission
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle font-monospace" style="font-size: 0.68rem;">
+                                            <i class="bi bi-person-check-fill me-1"></i>HOD: <?= e($p['hod_approver_name']) ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                             <td class="small">

@@ -10,11 +10,12 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/permissions.php';
 
-require_role(ROLE_SCIENTIST);
+require_role([ROLE_SCIENTIST, ROLE_HOD]);
 
 $pageTitle = 'Submit Ongoing Project Progress Report';
 $currentUser = current_user();
 $userId = current_user_id();
+$isHod = (current_user_role_id() === ROLE_HOD);
 $db = get_db();
 
 // Check if editing an existing draft/ongoing proposal
@@ -71,21 +72,39 @@ $department = $stmt->fetch() ?: ['id' => 1, 'department_code' => 'AGB', 'departm
 
 // Fetch all active/ongoing projects belonging to this scientist
 $userEmail = $currentUser['email'] ?? '';
-$stmtPrj = $db->prepare("
-    SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level,
-           d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
-    FROM projects p
-    LEFT JOIN proposals pr ON p.proposal_id = pr.id
-    LEFT JOIN departments d ON p.department_id = d.id
-    LEFT JOIN users u ON p.scientist_id = u.id
-    WHERE (p.scientist_id = ? OR p.id IN (
-        SELECT project_id FROM progress_reports WHERE submitted_by = ?
-    ) OR p.proposal_id IN (
-        SELECT proposal_id FROM proposal_co_pis WHERE email = ?
-    )) AND p.project_status = 'Active'
-    ORDER BY p.id DESC
-");
-$stmtPrj->execute([$userId, $userId, $userEmail]);
+if ($isHod) {
+    $stmtPrj = $db->prepare("
+        SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level,
+               d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
+        FROM projects p
+        LEFT JOIN proposals pr ON p.proposal_id = pr.id
+        LEFT JOIN departments d ON p.department_id = d.id
+        LEFT JOIN users u ON p.scientist_id = u.id
+        WHERE (p.scientist_id = ? OR p.department_id = ? OR p.id IN (
+            SELECT project_id FROM progress_reports WHERE submitted_by = ?
+        ) OR p.proposal_id IN (
+            SELECT proposal_id FROM proposal_co_pis WHERE email = ?
+        )) AND p.project_status = 'Active'
+        ORDER BY p.id DESC
+    ");
+    $stmtPrj->execute([$userId, (int)($currentUser['department_id'] ?? 1), $userId, $userEmail]);
+} else {
+    $stmtPrj = $db->prepare("
+        SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level,
+               d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
+        FROM projects p
+        LEFT JOIN proposals pr ON p.proposal_id = pr.id
+        LEFT JOIN departments d ON p.department_id = d.id
+        LEFT JOIN users u ON p.scientist_id = u.id
+        WHERE (p.scientist_id = ? OR p.id IN (
+            SELECT project_id FROM progress_reports WHERE submitted_by = ?
+        ) OR p.proposal_id IN (
+            SELECT proposal_id FROM proposal_co_pis WHERE email = ?
+        )) AND p.project_status = 'Active'
+        ORDER BY p.id DESC
+    ");
+    $stmtPrj->execute([$userId, $userId, $userEmail]);
+}
 $ongoingProjects = $stmtPrj->fetchAll();
 
 foreach ($ongoingProjects as &$prj) {
@@ -224,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
 
     $submissionAction = $_POST['submit_action'] ?? 'draft';
-    $targetStatus = ($submissionAction === 'submit') ? STATUS_SUBMITTED_HOD : STATUS_DRAFT;
+    $targetStatus = ($submissionAction === 'submit') ? ($isHod ? STATUS_FORWARDED_JD : STATUS_SUBMITTED_HOD) : STATUS_DRAFT;
 
     $projectId = (int)($_POST['project_id'] ?? ($selectedProject['id'] ?? 0));
     $reportPeriodCycle = trim(sanitize($_POST['report_period_cycle'] ?? ''));
@@ -240,15 +259,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Verify chosen project
     $matchedProject = $selectedProject;
     if (!$matchedProject && $projectId > 0) {
-        $stmtFind = $db->prepare("
-            SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level,
-                   d.department_code, d.department_name
-            FROM projects p
-            LEFT JOIN proposals pr ON p.proposal_id = pr.id
-            LEFT JOIN departments d ON p.department_id = d.id
-            WHERE p.id = ? AND (p.scientist_id = ? OR p.id IN (SELECT project_id FROM progress_reports WHERE submitted_by = ?) OR p.proposal_id IN (SELECT proposal_id FROM proposal_co_pis WHERE email = ?))
-        ");
-        $stmtFind->execute([$projectId, $userId, $userId, $userEmail]);
+        if ($isHod) {
+            $stmtFind = $db->prepare("
+                SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level,
+                       d.department_code, d.department_name
+                FROM projects p
+                LEFT JOIN proposals pr ON p.proposal_id = pr.id
+                LEFT JOIN departments d ON p.department_id = d.id
+                WHERE p.id = ? AND (p.scientist_id = ? OR p.department_id = ? OR p.id IN (SELECT project_id FROM progress_reports WHERE submitted_by = ?) OR p.proposal_id IN (SELECT proposal_id FROM proposal_co_pis WHERE email = ?))
+            ");
+            $stmtFind->execute([$projectId, $userId, (int)($currentUser['department_id'] ?? 1), $userId, $userEmail]);
+        } else {
+            $stmtFind = $db->prepare("
+                SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level,
+                       d.department_code, d.department_name
+                FROM projects p
+                LEFT JOIN proposals pr ON p.proposal_id = pr.id
+                LEFT JOIN departments d ON p.department_id = d.id
+                WHERE p.id = ? AND (p.scientist_id = ? OR p.id IN (SELECT project_id FROM progress_reports WHERE submitted_by = ?) OR p.proposal_id IN (SELECT proposal_id FROM proposal_co_pis WHERE email = ?))
+            ");
+            $stmtFind->execute([$projectId, $userId, $userId, $userEmail]);
+        }
         $matchedProject = $stmtFind->fetch();
     }
 
@@ -260,7 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (empty($reportYear)) {
             $error = "Reporting Financial Year is mandatory.";
         } elseif (empty($progressReport)) {
-            $error = "Executive Progress Report narrative is mandatory for submission to HOD.";
+            $error = "Executive Progress Report narrative is mandatory for submission" . ($isHod ? " to Joint Director." : " to HOD.");
         } elseif (empty($achievements)) {
             $error = "Significant Achievements during this reporting period are mandatory for submission.";
         } elseif (empty($previousIrcAtr)) {
@@ -435,7 +466,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmtPrgUpd->execute([
                         $achievements, $progressReport, $progressReport,
                         $budgetUtilizedVal, $budgetUtilizedVal,
-                        ($submissionAction === 'submit' ? 'Submitted' : 'Draft'),
+                        ($submissionAction === 'submit' ? ($isHod ? 'Forwarded to Joint Director' : 'Submitted') : 'Draft'),
                         $submittedAt, $now, $prgId
                     ]);
                 } else {
@@ -454,7 +485,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $progressReport,
                         $budgetUtilizedVal,
                         $budgetUtilizedVal,
-                        ($submissionAction === 'submit' ? 'Submitted' : 'Draft'),
+                        ($submissionAction === 'submit' ? ($isHod ? 'Forwarded to Joint Director' : 'Submitted') : 'Draft'),
                         $userId,
                         $submittedAt,
                         $now,
@@ -465,11 +496,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Record Status History and Audit Log
             $historyComment = ($submissionAction === 'submit') 
-                ? "Ongoing Project Progress Report for {$matchedProject['project_number']} ({$fullPeriodString}) submitted to Head of Department for review." 
+                ? ($isHod
+                    ? "Ongoing Project Progress Report for {$matchedProject['project_number']} ({$fullPeriodString}) submitted by Head of Department and forwarded directly to Joint Director for review."
+                    : "Ongoing Project Progress Report for {$matchedProject['project_number']} ({$fullPeriodString}) submitted to Head of Department for review.") 
                 : ($isEditMode ? "Ongoing Project Progress Report draft updated." : "Ongoing Project Progress Report draft saved.");
             
             $oldStatus = $isEditMode ? ($editProposal['current_status'] ?? null) : null;
-            record_status_history($proposalId, $oldStatus, $targetStatus, $userId, $currentUser['role_name'] ?? 'Scientist', $historyComment);
+            record_status_history($proposalId, $oldStatus, $targetStatus, $userId, $currentUser['role_name'] ?? ($isHod ? 'Head of Department' : 'Scientist'), $historyComment);
             
             $auditAction = ($submissionAction === 'submit') 
                 ? 'ONGOING_REPORT_SUBMITTED' 
@@ -479,7 +512,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->commit();
 
             if ($submissionAction === 'submit') {
-                flash('success', "Ongoing Project Progress Report ({$proposalNumber}) submitted successfully to Head of Department for IRC review.");
+                if ($isHod) {
+                    flash('success', "Ongoing Project Progress Report ({$proposalNumber}) submitted successfully and forwarded directly to Joint Director for IRC review.");
+                } else {
+                    flash('success', "Ongoing Project Progress Report ({$proposalNumber}) submitted successfully to Head of Department for IRC review.");
+                }
             } else {
                 flash('info', $isEditMode 
                     ? "Ongoing Project Progress Report ({$proposalNumber}) draft updated successfully." 
@@ -950,16 +987,16 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <!-- Scientist's Remarks / Covering Note for HOD -->
+    <!-- Progress Remarks / Covering Note -->
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white py-3 border-bottom d-flex align-items-center">
             <i class="bi bi-chat-left-quote text-primary me-2 fs-5"></i>
-            <h6 class="fw-bold text-dark m-0">Scientist's Progress Report Remarks / Note for Reviewers (HOD & Directorate)</h6>
+            <h6 class="fw-bold text-dark m-0"><?= $isHod ? "HOD's Progress Report Remarks / Note for Joint Director" : "Scientist's Progress Report Remarks / Note for Reviewers (HOD & Directorate)" ?></h6>
         </div>
         <div class="card-body">
-            <label class="form-label small fw-semibold text-secondary">Optional Remarks / Note for Head of Department</label>
-            <textarea name="submission_remarks" class="form-control" rows="2" placeholder="Provide any special remarks, constraints faced, highlights of the reporting cycle, or notes for the Head of Department and Joint Director..."><?= e($submissionRemarks ?? '') ?></textarea>
-            <div class="form-text extra-small text-muted">These comments and remarks will be prominently visible to the HOD when screening and reviewing your progress report.</div>
+            <label class="form-label small fw-semibold text-secondary">Optional Remarks / Note for <?= $isHod ? "Joint Director" : "Head of Department" ?></label>
+            <textarea name="submission_remarks" class="form-control" rows="2" placeholder="<?= $isHod ? 'Provide any special remarks, highlights of the reporting cycle, or notes for the Joint Director...' : 'Provide any special remarks, constraints faced, highlights of the reporting cycle, or notes for the Head of Department and Joint Director...' ?>"><?= e($submissionRemarks ?? '') ?></textarea>
+            <div class="form-text extra-small text-muted">These comments and remarks will be prominently visible to the <?= $isHod ? "Joint Director" : "HOD" ?> when screening and reviewing your progress report.</div>
         </div>
     </div>
 
@@ -969,13 +1006,15 @@ include __DIR__ . '/../includes/header.php';
             <div class="d-flex align-items-center text-muted small">
                 <i class="bi bi-diagram-3-fill text-primary me-2 fs-5"></i>
                 <div>
-                    <strong>Standard Institutional Workflow:</strong>
-                    Scientist &rarr; Head of Department (HOD) &rarr; Joint Director (Directorate) &rarr; IRC Council Approval.
+                    <strong>Institutional Workflow:</strong>
+                    <?= $isHod 
+                        ? 'Head of Department (HOD) Direct Submission &rarr; Joint Director (Directorate) Screening &rarr; IRC Council Approval.' 
+                        : 'Scientist &rarr; Head of Department (HOD) &rarr; Joint Director (Directorate) &rarr; IRC Council Approval.' ?>
                 </div>
             </div>
             <div class="d-flex gap-2">
                 <?php if ($isEditMode): ?>
-                    <a href="<?= url("/scientist/proposals.php?category=ongoing") ?>" class="btn btn-outline-secondary px-3">
+                    <a href="<?= $isHod ? url("/scientist/proposals.php?category=ongoing") : url("/scientist/proposals.php?category=ongoing") ?>" class="btn btn-outline-secondary px-3">
                         <i class="bi bi-x-circle me-1"></i> Discard Changes
                     </a>
                 <?php endif; ?>
@@ -983,7 +1022,7 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-save me-1"></i> <?= $isEditMode ? 'Update Draft' : 'Save as Draft' ?>
                 </button>
                 <button type="submit" name="submit_action" value="submit" class="btn btn-primary px-4 shadow-sm" style="background-color: #1a365d; border-color: #1a365d;" onclick="window.isDraftAction = false;">
-                    <i class="bi bi-send-fill me-1"></i> Submit Progress Report to HOD
+                    <i class="bi bi-send-fill me-1"></i> <?= $isHod ? 'Submit Progress Report to Joint Director' : 'Submit Progress Report to HOD' ?>
                 </button>
             </div>
         </div>

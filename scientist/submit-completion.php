@@ -8,21 +8,35 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-require_role(ROLE_SCIENTIST);
+require_role([ROLE_SCIENTIST, ROLE_HOD]);
 
 $projectId = isset($_GET['project_id']) ? (int)$_GET['project_id'] : 0;
+$currentUser = current_user();
 $userId = current_user_id();
+$isHod = (current_user_role_id() === ROLE_HOD);
 $db = get_db();
 
-$stmt = $db->prepare("SELECT pr.*, p.title as proposal_title, p.id as proposal_id,
-                             p.project_type as prop_project_type, p.funding_agency as prop_funding_agency,
-                             p.funding_agency_type as prop_funding_agency_type, p.yearly_budget as prop_yearly_budget,
-                             d.department_name
-                      FROM projects pr
-                      JOIN proposals p ON pr.proposal_id = p.id
-                      JOIN departments d ON COALESCE(pr.department_id, p.department_id) = d.id
-                      WHERE pr.id = ? AND pr.scientist_id = ?");
-$stmt->execute([$projectId, $userId]);
+if ($isHod) {
+    $stmt = $db->prepare("SELECT pr.*, p.title as proposal_title, p.id as proposal_id,
+                                 p.project_type as prop_project_type, p.funding_agency as prop_funding_agency,
+                                 p.funding_agency_type as prop_funding_agency_type, p.yearly_budget as prop_yearly_budget,
+                                 d.department_name
+                          FROM projects pr
+                          JOIN proposals p ON pr.proposal_id = p.id
+                          JOIN departments d ON COALESCE(pr.department_id, p.department_id) = d.id
+                          WHERE pr.id = ? AND (pr.scientist_id = ? OR pr.department_id = ?)");
+    $stmt->execute([$projectId, $userId, (int)($currentUser['department_id'] ?? 1)]);
+} else {
+    $stmt = $db->prepare("SELECT pr.*, p.title as proposal_title, p.id as proposal_id,
+                                 p.project_type as prop_project_type, p.funding_agency as prop_funding_agency,
+                                 p.funding_agency_type as prop_funding_agency_type, p.yearly_budget as prop_yearly_budget,
+                                 d.department_name
+                          FROM projects pr
+                          JOIN proposals p ON pr.proposal_id = p.id
+                          JOIN departments d ON COALESCE(pr.department_id, p.department_id) = d.id
+                          WHERE pr.id = ? AND pr.scientist_id = ?");
+    $stmt->execute([$projectId, $userId]);
+}
 $project = $stmt->fetch();
 
 if (!$project) {
@@ -126,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                ->execute([STATUS_COMPLETED, $now, $project['proposal_id']]);
 
             // Status history
-            record_status_history($project['proposal_id'], $prevPropStatus, STATUS_COMPLETED, $userId, 'Scientist', 'Project final completion dossier submitted. Status updated to Completed.');
+            record_status_history($project['proposal_id'], $prevPropStatus, STATUS_COMPLETED, $userId, $currentUser['role_name'] ?? ($isHod ? 'Head of Department' : 'Scientist'), 'Project final completion dossier submitted. Status updated to Completed.');
 
             log_audit($userId, 'COMPLETION_REPORT_SUBMITTED', 'projects', $projectId, "Final completion report filed for project {$project['project_number']}. Project marked Completed.");
 

@@ -24,7 +24,7 @@ $currentRoleId = current_user_role_id();
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!-- Custom Theme -->
-    <link rel="stylesheet" href="<?= url('/assets/css/style.css') ?>">
+    <link rel="stylesheet" href="<?= url('/assets/css/style.css?v=2.1') ?>">
 </head>
 <body>
 
@@ -62,7 +62,7 @@ $currentRoleId = current_user_role_id();
                 <i class="bi bi-list fs-3"></i>
             </button>
             <a href="<?= url('/') ?>" class="gov-brand">
-                <div class="gov-logo-badge">PRIME</div>
+                <div class="gov-logo-badge" style="width: 70px; min-width: 70px;">PRIME</div>
                 <div>
                     <div class="fw-bold fs-5 text-white" style="letter-spacing: 0.5px;">NDRI PRIME</div>
                     <div class="small text-white-50 d-none d-sm-block" style="font-size: 0.75rem;">Project Information Management and Evaluation System</div>

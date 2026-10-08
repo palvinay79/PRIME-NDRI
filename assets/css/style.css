@@ -44,15 +44,22 @@ body {
 .gov-logo-badge {
     background-color: #ffffff;
     color: #0f233d;
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 800;
-    width: 38px;
+    width: 70px !important;
+    min-width: 70px !important;
     height: 38px;
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: 2px solid var(--accent-gold);
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+    padding: 0 6px;
+    box-sizing: border-box;
+    white-space: nowrap;
+    overflow: visible;
 }
 
 /* App Shell Layout */

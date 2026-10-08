@@ -79,11 +79,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $prevStatus = $proposal['current_status'];
 
+            $isSubmitterHod = ($hodInfo['name'] === $proposal['scientist_name']);
             if ($decision === 'return') {
                 $newStatus = STATUS_RETURNED_JD;
                 $actionType = 'PROPOSAL_RETURNED_BY_JD';
                 $histComment = "Returned by Joint Director (Research) for revisions. Directives: " . $remarks;
-                $flashMsg = "Proposal {$proposal['proposal_number']} returned to Scientist for revision.";
+                $flashMsg = "Proposal {$proposal['proposal_number']} returned to " . ($isSubmitterHod ? "Head of Department" : "Scientist") . " for revision.";
             } else {
                 $newStatus = STATUS_APPROVED_IRC;
                 $actionType = 'PROPOSAL_APPROVED_FOR_IRC';
