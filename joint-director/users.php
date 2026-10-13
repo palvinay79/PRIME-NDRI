@@ -733,11 +733,6 @@ include __DIR__ . '/../includes/header.php';
                                     </div>
                                 <?php else: ?>
                                     <div class="btn-group btn-group-sm">
-                                        <!-- Quick Switch / Impersonate for quick testing -->
-                                        <a href="<?= url("/switch-role.php?user_id=" . $u['id']) ?>" class="btn btn-outline-secondary" title="Login / Switch to this user for evaluation">
-                                            <i class="bi bi-box-arrow-in-right"></i>
-                                        </a>
-
                                         <!-- Edit User Button -->
                                         <button type="button" class="btn btn-outline-primary" title="Edit Profile"
                                                 data-bs-toggle="modal"
@@ -874,10 +869,10 @@ include __DIR__ . '/../includes/header.php';
                             <a href="javascript:void(0)" class="text-decoration-none small" onclick="generateRandomPass('createPassInput')">Generate Secure Pass</a>
                         </label>
                         <div class="input-group">
-                            <input type="text" name="password" id="createPassInput" class="form-control font-monospace" value="password123" required minlength="6">
-                            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('createPassInput').value='password123'">Default</button>
+                            <input type="text" name="password" id="createPassInput" class="form-control font-monospace" placeholder="Enter password (min 6 characters)" required minlength="6">
+                            <button type="button" class="btn btn-outline-secondary" onclick="generateRandomPass('createPassInput')"><i class="bi bi-shuffle me-1"></i>Generate</button>
                         </div>
-                        <div class="form-text">Min 6 characters. Default is <code>password123</code>.</div>
+                        <div class="form-text">Minimum 6 characters.</div>
                     </div>
 
                     <div class="mb-3">
@@ -1014,7 +1009,7 @@ include __DIR__ . '/../includes/header.php';
                     <p class="small text-muted mb-2">Reset password for <strong id="resetUserName" class="text-dark"></strong>:</p>
                     <div class="mb-3">
                         <label class="form-label small fw-semibold text-dark">New Password</label>
-                        <input type="text" name="new_password" id="resetPassInput" class="form-control font-monospace" value="password123" required minlength="6">
+                        <input type="text" name="new_password" id="resetPassInput" class="form-control font-monospace" placeholder="Enter new password (min 6 characters)" required minlength="6">
                     </div>
                 </div>
 

@@ -37,8 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
-        // Check password (allows standard verify or demo fallback password)
-        if ($user && (password_verify($password, $user['password']) || $password === 'password123')) {
+        // Verify password against secure hash
+        if ($user && password_verify($password, $user['password'])) {
             if ($user['status'] === 'pending') {
                 $error = "Your registration for <strong>" . e($user['name']) . "</strong> (" . e($user['role_name']) . ") has been submitted and is currently <strong>Awaiting Approval</strong> by the Joint Director (Research). You will be granted login access once verified.";
                 log_audit(null, 'LOGIN_BLOCKED_PENDING_APPROVAL', 'users', (int)$user['id'], "Login attempt for pending account {$email}");
@@ -155,32 +155,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </a>
                         </div>
                     </form>
-
-                    <hr class="my-4 text-muted">
-
-                    <!-- Quick Testing Login Helper -->
-                    <div>
-                        <div class="text-center text-muted small fw-semibold mb-2">
-                            <i class="bi bi-lightning-charge-fill text-warning me-1"></i> Quick Role Access (Demo Accounts):
-                        </div>
-                        <div class="d-grid gap-2">
-                            <a href="<?= url('/switch-role.php?user_id=1') ?>" class="btn btn-sm btn-outline-secondary text-start d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-person-workspace text-primary me-2"></i><strong>Dr. Aris Thorne</strong> (Scientist)</span>
-                                <span class="badge bg-primary-subtle text-primary">Scientist</span>
-                            </a>
-                            <a href="<?= url('/switch-role.php?user_id=3') ?>" class="btn btn-sm btn-outline-secondary text-start d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-person-check text-success me-2"></i><strong>Prof. Rajesh Kumar</strong> (HOD - AGB)</span>
-                                <span class="badge bg-success-subtle text-success">HOD</span>
-                            </a>
-                            <a href="<?= url('/switch-role.php?user_id=5') ?>" class="btn btn-sm btn-outline-secondary text-start d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-award text-warning me-2"></i><strong>Dr. Jay Dee</strong> (Joint Director)</span>
-                                <span class="badge bg-warning-subtle text-dark">Joint Director</span>
-                            </a>
-                        </div>
-                        <div class="text-center mt-2">
-                            <small class="text-muted" style="font-size: 0.75rem;">Default credentials password: <code>password123</code></small>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

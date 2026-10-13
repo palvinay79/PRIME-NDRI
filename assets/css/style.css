@@ -267,22 +267,9 @@ body {
     padding: 20px;
 }
 
-/* Role Switcher Floating Pill for Easy Demo Testing */
-.role-switch-bar {
-    background-color: #0f172a;
-    color: #e2e8f0;
-    padding: 8px 16px;
-    font-size: 0.82rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    border-bottom: 1px solid #334155;
-}
-
 /* Print Optimization for Word/PDF Review Reports */
 @media print {
-    .app-sidebar, .gov-header, .role-switch-bar, .btn, .no-print {
+    .app-sidebar, .gov-header, .btn, .no-print {
         display: none !important;
     }
     .app-content {

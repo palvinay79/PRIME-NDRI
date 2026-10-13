@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "New password and confirmation password do not match.";
         } elseif (strlen($newPassword) < 6) {
             $error = "New password must be at least 6 characters in length.";
-        } elseif (!password_verify($currentPassword, $user['password']) && $currentPassword !== 'password123') {
+        } elseif (!password_verify($currentPassword, $user['password'])) {
             $error = "Current password verification failed.";
         } else {
             $hashed = password_hash($newPassword, PASSWORD_BCRYPT);
@@ -126,7 +126,6 @@ include __DIR__ . '/includes/header.php';
                     <div class="mb-3">
                         <label for="current_password" class="form-label text-secondary small fw-semibold">Current Password</label>
                         <input type="password" class="form-control" id="current_password" name="current_password" required>
-                        <small class="text-muted">Default for demo accounts: <code>password123</code></small>
                     </div>
 
                     <div class="mb-3">

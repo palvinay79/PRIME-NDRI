@@ -28,32 +28,6 @@ $currentRoleId = current_user_role_id();
 </head>
 <body>
 
-<?php if (is_logged_in()): ?>
-<!-- Quick Role Switcher Banner for Seamless Testing -->
-<div class="role-switch-bar no-print">
-    <div class="d-flex align-items-center gap-2">
-        <span class="badge bg-warning text-dark"><i class="bi bi-person-badge me-1"></i>Active Role:</span>
-        <strong><?= e($currentUser['name']) ?></strong>
-        <span class="text-secondary">(<?= e($currentUser['role_name'] ?? ($currentUser['role_id'] == 1 ? 'Scientist' : ($currentUser['role_id'] == 2 ? 'HOD' : 'Joint Director'))) ?> - <?= e($currentUser['department_code'] ?? 'CS') ?>)</span>
-    </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-        <span class="text-white-50 small">Switch Demo Role:</span>
-        <a href="<?= url('/switch-role.php?user_id=2&redirect=' . urlencode($_SERVER['REQUEST_URI'])) ?>" class="btn btn-xs btn-outline-light <?= $currentUser['id'] == 2 ? 'active fw-bold' : '' ?>" style="font-size: 0.75rem; padding: 2px 8px;">
-            Scientist (Dr. Sarah)
-        </a>
-        <a href="<?= url('/switch-role.php?user_id=1&redirect=' . urlencode($_SERVER['REQUEST_URI'])) ?>" class="btn btn-xs btn-outline-light <?= $currentUser['id'] == 1 ? 'active fw-bold' : '' ?>" style="font-size: 0.75rem; padding: 2px 8px;">
-            Scientist (Dr. Aris)
-        </a>
-        <a href="<?= url('/switch-role.php?user_id=3&redirect=' . urlencode($_SERVER['REQUEST_URI'])) ?>" class="btn btn-xs btn-outline-light <?= $currentUser['id'] == 3 ? 'active fw-bold' : '' ?>" style="font-size: 0.75rem; padding: 2px 8px;">
-            HOD (Prof. Rajesh)
-        </a>
-        <a href="<?= url('/switch-role.php?user_id=5&redirect=' . urlencode($_SERVER['REQUEST_URI'])) ?>" class="btn btn-xs btn-outline-light <?= $currentUser['id'] == 5 ? 'active fw-bold' : '' ?>" style="font-size: 0.75rem; padding: 2px 8px;">
-            Joint Director (Dr. Jay Dee)
-        </a>
-    </div>
-</div>
-<?php endif; ?>
-
 <!-- Top Institutional Header -->
 <header class="gov-header py-2 px-3 px-md-4">
     <div class="d-flex align-items-center justify-content-between">

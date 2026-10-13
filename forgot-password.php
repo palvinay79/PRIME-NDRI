@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user) {
             log_audit((int)$user['id'], 'PASSWORD_RESET_REQUESTED', 'users', (int)$user['id'], "Password reset requested for {$email}");
-            $message = "A password reset link and instruction email has been dispatched to {$email}. For demonstration environments, your current password is 'password123'.";
+            $message = "A password reset link and instructions have been dispatched to {$email}. Please check your institutional email to proceed.";
         } else {
             // Security: avoid revealing user enumeration
             $message = "If an active institutional account exists for that email, password instructions have been sent.";

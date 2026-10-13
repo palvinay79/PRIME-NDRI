@@ -246,12 +246,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
                         </div>
 
-                        <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
+                        <div class="d-flex justify-content-center">
                             <a href="<?= url('/login.php') ?>" class="btn btn-primary px-4 py-2" style="background-color: #1a365d; border-color: #1a365d;">
                                 <i class="bi bi-box-arrow-in-right me-1"></i> Go to Sign In Page
-                            </a>
-                            <a href="<?= url('/switch-role.php?user_id=5') ?>" class="btn btn-outline-warning px-4 py-2 text-dark">
-                                <i class="bi bi-shield-check me-1"></i> Switch to Joint Director to Approve Now
                             </a>
                         </div>
                     </div>
