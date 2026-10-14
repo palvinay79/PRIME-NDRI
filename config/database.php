@@ -1133,6 +1133,22 @@ SQL;
         (5, 'Dr. Jay Dee', 'jointdirector@ndri.res.in', ?, 3, 1, 'Joint Director (Research)', 'active')");
     $stmt->execute([$default_hash, $default_hash, $default_hash, $default_hash, $default_hash]);
 
+    // Date helpers for sample data (works seamlessly across MariaDB, MySQL, and SQLite)
+    $d30 = date('Y-m-d H:i:s', strtotime('-30 days'));
+    $d25 = date('Y-m-d H:i:s', strtotime('-25 days'));
+    $d20 = date('Y-m-d H:i:s', strtotime('-20 days'));
+    $d15 = date('Y-m-d H:i:s', strtotime('-15 days'));
+    $d12 = date('Y-m-d H:i:s', strtotime('-12 days'));
+    $d10 = date('Y-m-d H:i:s', strtotime('-10 days'));
+    $d9  = date('Y-m-d H:i:s', strtotime('-9 days'));
+    $d8  = date('Y-m-d H:i:s', strtotime('-8 days'));
+    $d7  = date('Y-m-d H:i:s', strtotime('-7 days'));
+    $d6  = date('Y-m-d H:i:s', strtotime('-6 days'));
+    $d5  = date('Y-m-d H:i:s', strtotime('-5 days'));
+    $d4  = date('Y-m-d H:i:s', strtotime('-4 days'));
+    $d3  = date('Y-m-d H:i:s', strtotime('-3 days'));
+    $d2  = date('Y-m-d H:i:s', strtotime('-2 days'));
+
     // Seed initial realistic proposals across diverse workflow stages to demonstrate full workflow immediately
     $stmt_prop = $pdo->prepare("INSERT INTO proposals (
         id, proposal_number, title, scientist_id, department_id, institute_priority_area, national_priority_area,
@@ -1140,7 +1156,7 @@ SQL;
         technical_program, objectives, methodology, expected_outcomes, proposed_budget, budget_justification,
         proposed_start_date, proposed_end_date, current_status, project_number, approved_budget, approved_start_date,
         approved_end_date, approved_timeframe, submitted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-10 days'))");
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     // Proposal 1: Forwarded to Joint Director
     $stmt_prop->execute([
@@ -1151,7 +1167,8 @@ SQL;
         'Aligns with Institute priority on digital livestock diagnostics.', 'Phased algorithm training and sensor validation.',
         '1. Develop edge-AI model\n2. Calibrate sensor\n3. On-farm validation', 'Computer vision and optical spectroscopy.',
         'High-throughput mobile mastitis screening device.', 850000.00, 'Consumables, optical sensor kit, field trial travel.',
-        '2026-04-01', '2028-03-31', 'Forwarded to Joint Director', null, null, null, null, null
+        '2026-04-01', '2028-03-31', 'Forwarded to Joint Director', null, null, null, null, null,
+        $d9
     ]);
 
     // Proposal 2: Approved / Project Active
@@ -1163,7 +1180,8 @@ SQL;
         'Directly supports climate-resilient dairy livestock vision.', 'In vitro fermentation followed by in vivo cattle trials.',
         '1. Screen phyto-sources\n2. Formulation trial\n3. Cattle respiration chamber trials', 'In vivo calorimeter chamber trials.',
         'Standardized feed blend reducing methane by >18%.', 1420000.00, 'Calorimeter operational expenses, cattle feedstocks, assays.',
-        '2025-07-01', '2028-06-30', 'Approved / Active', 'PROJ-NDRI-2025-089', 1350000.00, '2025-08-01', '2028-07-31', '3 Years'
+        '2025-07-01', '2028-06-30', 'Approved / Active', 'PROJ-NDRI-2025-089', 1350000.00, '2025-08-01', '2028-07-31', '3 Years',
+        $d30
     ]);
 
     // Create corresponding active project for Proposal 2
@@ -1179,7 +1197,8 @@ SQL;
         'Enhances export traceability compliance.', 'Smart contract development and pilot cooperative deployment.',
         '1. Design smart contracts\n2. Pilot in 2 collection centers', 'Hyperledger Besu prototype with mobile interface.',
         'Transparent cooperative milk ledger.', 620000.00, 'Cloud servers, field tablet hardware, training workshops.',
-        '2026-05-01', '2027-04-30', 'Returned by HOD', null, null, null, null, null
+        '2026-05-01', '2027-04-30', 'Returned by HOD', null, null, null, null, null,
+        $d8
     ]);
 
     // Proposal 4: Joint Director's own proposal (Pending HOD Review - testing special rule!)
@@ -1191,7 +1210,8 @@ SQL;
         'Core infrastructure mandate of Joint Director office.', 'Architecture deployment, storage tiering, data pipelines.',
         '1. Deploy high-capacity storage node\n2. Migrate 500+ bovine genome sequences', 'Ceph/S3 clustered storage with Nextflow pipelines.',
         'National Bovine Genomic Repository Portal.', 2500000.00, 'NVMe cluster servers, 10GbE networking, bioinformatician fellowship.',
-        '2026-06-01', '2029-05-31', 'Submitted to HOD', null, null, null, null, null
+        '2026-06-01', '2029-05-31', 'Submitted to HOD', null, null, null, null, null,
+        $d3
     ]);
 
     // Proposal 5: Approved for IRC Meeting
@@ -1203,7 +1223,8 @@ SQL;
         'Addresses climate adaptation in milch animals.', 'Controlled psychrometric chamber experiments.',
         '1. Measure blood biomarker profile\n2. Formulate anti-stress supplement', 'Biochemical assays, RNA-seq, and temperature-humidity index logs.',
         'Climate-resilient nutritional intervention protocol.', 1180000.00, 'Environmental chamber power, RNA kits, animal maintenance.',
-        '2026-06-01', '2028-05-31', 'Approved for IRC Meeting', null, null, null, null, null
+        '2026-06-01', '2028-05-31', 'Approved for IRC Meeting', null, null, null, null, null,
+        $d12
     ]);
 
     // Seed Co-PIs
@@ -1219,40 +1240,40 @@ SQL;
 
     // Seed Status History
     $pdo->exec("INSERT INTO proposal_status_history (proposal_id, previous_status, new_status, action_by, action_by_role, comments, created_at) VALUES
-        (1, 'Draft', 'Submitted to HOD', 1, 'Scientist', 'Initial submission for departmental review.', datetime('now', '-9 days')),
-        (1, 'Submitted to HOD', 'Forwarded to Joint Director', 3, 'Head of Department', 'Reviewed objectives and methodology. Strongly recommended for Institute Research Council consideration.', datetime('now', '-7 days')),
-        (2, 'Draft', 'Submitted to HOD', 2, 'Scientist', 'Submitted proposal for approval.', datetime('now', '-30 days')),
-        (2, 'Submitted to HOD', 'Forwarded to Joint Director', 4, 'Head of Department', 'Aligned with divisional methane reduction targets.', datetime('now', '-25 days')),
-        (2, 'Forwarded to Joint Director', 'Approved for IRC Meeting', 5, 'Joint Director', 'Excellent proposal addressing COP targets. Placed in 48th IRC Meeting agenda.', datetime('now', '-20 days')),
-        (2, 'Approved for IRC Meeting', 'Approved / Project Active', 5, 'Joint Director', 'IRC unanimously approved. Project number PROJ-NDRI-2025-089 allotted with budget Rs. 13.5 Lakhs.', datetime('now', '-15 days')),
-        (3, 'Draft', 'Submitted to HOD', 1, 'Scientist', 'Submitted proposal on blockchain traceability.', datetime('now', '-8 days')),
-        (3, 'Submitted to HOD', 'Returned by HOD', 3, 'Head of Department', 'Please clarify field validation plan in rural collection centers with low internet connectivity and revise methodology section.', datetime('now', '-6 days')),
-        (4, 'Draft', 'Submitted to HOD', 5, 'Scientist (Joint Director)', 'Submitted proposal as Principal Investigator. Routed to HOD Computer Science as per mandatory workflow governance rules.', datetime('now', '-3 days')),
-        (5, 'Draft', 'Submitted to HOD', 2, 'Scientist', 'Proposal submitted.', datetime('now', '-12 days')),
-        (5, 'Submitted to HOD', 'Forwarded to Joint Director', 4, 'Head of Department', 'Recommended.', datetime('now', '-8 days')),
-        (5, 'Forwarded to Joint Director', 'Approved for IRC Meeting', 5, 'Joint Director', 'Approved for agenda of upcoming 49th IRC meeting.', datetime('now', '-4 days'));");
+        (1, 'Draft', 'Submitted to HOD', 1, 'Scientist', 'Initial submission for departmental review.', '{$d9}'),
+        (1, 'Submitted to HOD', 'Forwarded to Joint Director', 3, 'Head of Department', 'Reviewed objectives and methodology. Strongly recommended for Institute Research Council consideration.', '{$d7}'),
+        (2, 'Draft', 'Submitted to HOD', 2, 'Scientist', 'Submitted proposal for approval.', '{$d30}'),
+        (2, 'Submitted to HOD', 'Forwarded to Joint Director', 4, 'Head of Department', 'Aligned with divisional methane reduction targets.', '{$d25}'),
+        (2, 'Forwarded to Joint Director', 'Approved for IRC Meeting', 5, 'Joint Director', 'Excellent proposal addressing COP targets. Placed in 48th IRC Meeting agenda.', '{$d20}'),
+        (2, 'Approved for IRC Meeting', 'Approved / Project Active', 5, 'Joint Director', 'IRC unanimously approved. Project number PROJ-NDRI-2025-089 allotted with budget Rs. 13.5 Lakhs.', '{$d15}'),
+        (3, 'Draft', 'Submitted to HOD', 1, 'Scientist', 'Submitted proposal on blockchain traceability.', '{$d8}'),
+        (3, 'Submitted to HOD', 'Returned by HOD', 3, 'Head of Department', 'Please clarify field validation plan in rural collection centers with low internet connectivity and revise methodology section.', '{$d6}'),
+        (4, 'Draft', 'Submitted to HOD', 5, 'Scientist (Joint Director)', 'Submitted proposal as Principal Investigator. Routed to HOD Computer Science as per mandatory workflow governance rules.', '{$d3}'),
+        (5, 'Draft', 'Submitted to HOD', 2, 'Scientist', 'Proposal submitted.', '{$d12}'),
+        (5, 'Submitted to HOD', 'Forwarded to Joint Director', 4, 'Head of Department', 'Recommended.', '{$d8}'),
+        (5, 'Forwarded to Joint Director', 'Approved for IRC Meeting', 5, 'Joint Director', 'Approved for agenda of upcoming 49th IRC meeting.', '{$d4}');");
 
     // Seed Comments
     $pdo->exec("INSERT INTO proposal_comments (proposal_id, user_id, comment, comment_stage, created_at) VALUES
-        (1, 3, 'Objectives are well formulated. Please ensure statistical sample size is verified with the biometrics unit.', 'HOD Review', datetime('now', '-7 days')),
-        (3, 3, 'Methodology must explain offline synchronization mechanism for village milk collection points.', 'HOD Review', datetime('now', '-6 days'));");
+        (1, 3, 'Objectives are well formulated. Please ensure statistical sample size is verified with the biometrics unit.', 'HOD Review', '{$d7}'),
+        (3, 3, 'Methodology must explain offline synchronization mechanism for village milk collection points.', 'HOD Review', '{$d6}');");
 
     // Seed 1 Progress Report for Project 2
     $pdo->exec("INSERT INTO progress_reports (id, project_id, reporting_period, progress_summary, work_completed, achievements, challenges, budget_utilization, next_steps, submitted_by, submitted_at) VALUES
-        (1, 1, 'Q1-Q2 (Aug 2025 - Jan 2026)', 'Completed phytogenic screening and initial in-vitro gas production assays.', 'Screened 14 indigenous tannin plant extracts for in vitro gas production suppression. Two formulations exhibited >22% methane mitigation without reducing volatile fatty acid concentration.', 'Identified high-efficiency formulation TF-4B. Published 1 conference abstract in ANSI-2025.', 'Procurement delay for specialized gas chromatography column resolved.', 380000.00, 'Begin in vivo cattle digestibility trials with Murrah buffalo heifers in next quarter.', 2, datetime('now', '-5 days'));");
+        (1, 1, 'Q1-Q2 (Aug 2025 - Jan 2026)', 'Completed phytogenic screening and initial in-vitro gas production assays.', 'Screened 14 indigenous tannin plant extracts for in vitro gas production suppression. Two formulations exhibited >22% methane mitigation without reducing volatile fatty acid concentration.', 'Identified high-efficiency formulation TF-4B. Published 1 conference abstract in ANSI-2025.', 'Procurement delay for specialized gas chromatography column resolved.', 380000.00, 'Begin in vivo cattle digestibility trials with Murrah buffalo heifers in next quarter.', 2, '{$d5}');");
 
     // Seed Progress Report Comment
     $pdo->exec("INSERT INTO progress_report_comments (progress_report_id, user_id, comment, created_at) VALUES
-        (1, 4, 'Satisfactory progress. Ensure animal welfare ethics committee clearances are kept on record before commencing the in vivo trials.', datetime('now', '-3 days')),
-        (1, 5, 'Commendable progress on the formulation TF-4B. File patent disclosure with IPMU if formulation novelty is confirmed.', datetime('now', '-2 days'));");
+        (1, 4, 'Satisfactory progress. Ensure animal welfare ethics committee clearances are kept on record before commencing the in vivo trials.', '{$d3}'),
+        (1, 5, 'Commendable progress on the formulation TF-4B. File patent disclosure with IPMU if formulation novelty is confirmed.', '{$d2}');");
 
     // Seed Audit Logs
     $pdo->exec("INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, ip_address, created_at) VALUES
-        (1, 'USER_LOGIN', 'users', 1, 'Dr. Aris Thorne logged in successfully.', '127.0.0.1', datetime('now', '-10 days')),
-        (1, 'PROPOSAL_CREATE', 'proposals', 1, 'Proposal PROP-2026-CS-001 created as Draft.', '127.0.0.1', datetime('now', '-10 days')),
-        (1, 'PROPOSAL_SUBMIT', 'proposals', 1, 'Proposal submitted to HOD.', '127.0.0.1', datetime('now', '-9 days')),
-        (3, 'PROPOSAL_FORWARD', 'proposals', 1, 'HOD forwarded proposal to Joint Director.', '127.0.0.1', datetime('now', '-7 days')),
-        (3, 'PROPOSAL_RETURN', 'proposals', 3, 'HOD returned proposal PROP-2026-CS-002 for revisions.', '127.0.0.1', datetime('now', '-6 days')),
-        (5, 'PROPOSAL_CREATE', 'proposals', 4, 'Joint Director Dr. Jay Dee created own proposal PROP-2026-CS-003.', '127.0.0.1', datetime('now', '-3 days')),
-        (5, 'PROPOSAL_SUBMIT', 'proposals', 4, 'Joint Director submitted proposal to HOD (Mandatory self-approval bypass guard enforced).', '127.0.0.1', datetime('now', '-3 days'));");
+        (1, 'USER_LOGIN', 'users', 1, 'Dr. Aris Thorne logged in successfully.', '127.0.0.1', '{$d10}'),
+        (1, 'PROPOSAL_CREATE', 'proposals', 1, 'Proposal PROP-2026-CS-001 created as Draft.', '127.0.0.1', '{$d10}'),
+        (1, 'PROPOSAL_SUBMIT', 'proposals', 1, 'Proposal submitted to HOD.', '127.0.0.1', '{$d9}'),
+        (3, 'PROPOSAL_FORWARD', 'proposals', 1, 'HOD forwarded proposal to Joint Director.', '127.0.0.1', '{$d7}'),
+        (3, 'PROPOSAL_RETURN', 'proposals', 3, 'HOD returned proposal PROP-2026-CS-002 for revisions.', '127.0.0.1', '{$d6}'),
+        (5, 'PROPOSAL_CREATE', 'proposals', 4, 'Joint Director Dr. Jay Dee created own proposal PROP-2026-CS-003.', '127.0.0.1', '{$d3}'),
+        (5, 'PROPOSAL_SUBMIT', 'proposals', 4, 'Joint Director submitted proposal to HOD (Mandatory self-approval bypass guard enforced).', '127.0.0.1', '{$d3}');");
 }

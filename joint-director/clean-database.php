@@ -182,13 +182,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // Seed realistic proposals
+            $submittedAt = date('Y-m-d H:i:s', strtotime('-5 days'));
             $stmtProp = $db->prepare("INSERT INTO proposals (
                 id, proposal_number, title, scientist_id, department_id, institute_priority_area, national_priority_area,
                 trl_level, research_problem, baseline_info, novelty_gap_analysis, justification_end_users, institute_alignment,
                 technical_program, objectives, methodology, expected_outcomes, proposed_budget, budget_justification,
                 proposed_start_date, proposed_end_date, current_status, project_number, approved_budget, approved_start_date,
                 approved_end_date, approved_timeframe, submitted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '-5 days'))");
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
             $stmtProp->execute([
                 1, 'PROP-2026-AGB-001', 'AI-Driven Somatic Cell Count Analysis in Bovine Milk',
@@ -198,7 +199,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'Aligns with Institute priority on digital livestock diagnostics.', 'Phased algorithm training and sensor validation.',
                 '1. Develop edge-AI model\n2. Calibrate sensor\n3. On-farm validation', 'Computer vision and optical spectroscopy.',
                 'High-throughput mobile mastitis screening device.', 850000.00, 'Consumables, optical sensor kit, field trial travel.',
-                '2026-04-01', '2028-03-31', 'Forwarded to Joint Director', null, null, null, null, null
+                '2026-04-01', '2028-03-31', 'Forwarded to Joint Director', null, null, null, null, null,
+                $submittedAt
             ]);
 
             $stmtProp->execute([
@@ -209,11 +211,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'Directly supports climate-resilient dairy livestock vision.', 'In vitro fermentation followed by in vivo cattle trials.',
                 '1. Screen phyto-sources\n2. Formulation trial\n3. Cattle respiration chamber trials', 'In vivo calorimeter chamber trials.',
                 'Standardized feed blend reducing methane by >18%.', 1420000.00, 'Calorimeter operational expenses, cattle feedstocks, assays.',
-                '2025-07-01', '2028-06-30', 'Approved / Active', 'PROJ-NDRI-2025-089', 1350000.00, '2025-08-01', '2028-07-31', '3 Years'
+                '2025-07-01', '2028-06-30', 'Approved / Active', 'PROJ-NDRI-2025-089', 1350000.00, '2025-08-01', '2028-07-31', '3 Years',
+                $submittedAt
             ]);
 
             $db->exec("INSERT INTO projects (id, proposal_id, project_number, scientist_id, department_id, project_status, start_date, end_date, approved_budget)
                        VALUES (1, 2, 'PROJ-NDRI-2025-089', 2, 6, 'Active', '2025-08-01', '2028-07-31', 1350000.00);");
+
+            // Seed Co-PIs
+            $db->exec("INSERT INTO proposal_co_pis (proposal_id, co_pi_name, institution, designation, email) VALUES
+                (1, 'Dr. K. S. Sharma', 'ICAR-NDRI, Karnal', 'Principal Scientist (Dairy Tech)', 'kss@ndri.res.in'),
+                (2, 'Dr. Sunita Verma', 'ICAR-IVRI, Bareilly', 'Senior Scientist (Biochemistry)', 'sunita.v@ivri.res.in');");
+
+            // Seed Status History
+            $d9 = date('Y-m-d H:i:s', strtotime('-9 days'));
+            $d7 = date('Y-m-d H:i:s', strtotime('-7 days'));
+            $d30 = date('Y-m-d H:i:s', strtotime('-30 days'));
+            $d25 = date('Y-m-d H:i:s', strtotime('-25 days'));
+            $d20 = date('Y-m-d H:i:s', strtotime('-20 days'));
+            $d15 = date('Y-m-d H:i:s', strtotime('-15 days'));
+
+            $db->exec("INSERT INTO proposal_status_history (proposal_id, previous_status, new_status, action_by, action_by_role, comments, created_at) VALUES
+                (1, 'Draft', 'Submitted to HOD', 1, 'Scientist', 'Initial submission for departmental review.', '{$d9}'),
+                (1, 'Submitted to HOD', 'Forwarded to Joint Director', 3, 'Head of Department', 'Reviewed objectives and methodology. Strongly recommended for Institute Research Council consideration.', '{$d7}'),
+                (2, 'Draft', 'Submitted to HOD', 2, 'Scientist', 'Submitted proposal for approval.', '{$d30}'),
+                (2, 'Submitted to HOD', 'Forwarded to Joint Director', 4, 'Head of Department', 'Aligned with divisional methane reduction targets.', '{$d25}'),
+                (2, 'Forwarded to Joint Director', 'Approved for IRC Meeting', 5, 'Joint Director', 'Excellent proposal addressing COP targets. Placed in 48th IRC Meeting agenda.', '{$d20}'),
+                (2, 'Approved for IRC Meeting', 'Approved / Project Active', 5, 'Joint Director', 'IRC unanimously approved. Project number PROJ-NDRI-2025-089 allotted with budget Rs. 13.5 Lakhs.', '{$d15}');");
+
+            // Seed comments
+            $db->exec("INSERT INTO proposal_comments (proposal_id, user_id, comment, comment_stage, created_at) VALUES
+                (1, 3, 'Objectives are well formulated. Please ensure statistical sample size is verified with the biometrics unit.', 'HOD Review', '{$d7}');");
 
             $db->commit();
 
