@@ -118,6 +118,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt->execute([$name, $email, $mobileNo, $discipline, $roleId, $departmentId, $designation, $status, $userId]);
                     }
 
+                    if ($userId === $currentUserId) {
+                        $_SESSION['user']['name'] = $name;
+                        $_SESSION['user']['email'] = $email;
+                        $_SESSION['user']['designation'] = $designation;
+                        $_SESSION['user']['role_id'] = $roleId;
+                        $_SESSION['user']['role_name'] = get_role_name_by_id($roleId);
+                    }
+
                     log_audit($currentUserId, 'USER_UPDATED', 'users', $userId, "Updated profile for {$name} (Role: " . get_role_name_by_id($roleId) . ", Phone: " . ($mobileNo ?: 'N/A') . ")");
                     flash('success', "User profile for <strong>" . e($name) . "</strong> has been updated successfully.");
                 }

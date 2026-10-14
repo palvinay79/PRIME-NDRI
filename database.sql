@@ -297,12 +297,13 @@ INSERT INTO departments (id, department_code, department_name) VALUES
 (13, 'SRS', 'Southern Regional Station, Bengaluru'),
 (14, 'ERS', 'Eastern Regional Station, Kalyani');
 
--- Pre-hashed: password123 -> $2y$10$nNf/E24qK9eWpG0/vTjQMe7kZgH8f/J8bN6D5G7H8J9K0L1M2N3O4
 -- Standard PHP password_hash for 'password123':
--- $2y$10$w8T9Vv4vUvU9V7y.mN2s6u0C7J9B3K6M9R0S1T2U3V4W5X6Y7Z8a
+-- $2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C
 INSERT INTO users (id, name, email, password, role_id, department_id, designation, status) VALUES
-(1, 'Dr. Aris Thorne', 'scientist1@ndri.res.in', '$2y$10$mBqLzU0Yj7xN6mP9r1S3uO5kG9V7xJ8aB0cD1eF2gH3iJ4kL5mN6o', 1, 1, 'Senior Scientist', 'active'),
-(2, 'Dr. Sarah Jenkins', 'scientist2@ndri.res.in', '$2y$10$mBqLzU0Yj7xN6mP9r1S3uO5kG9V7xJ8aB0cD1eF2gH3iJ4kL5mN6o', 1, 6, 'Scientist', 'active'),
-(3, 'Prof. Rajesh Kumar', 'hod.agb@ndri.res.in', '$2y$10$mBqLzU0Yj7xN6mP9r1S3uO5kG9V7xJ8aB0cD1eF2gH3iJ4kL5mN6o', 2, 1, 'Head of Department (AGB)', 'active'),
-(4, 'Prof. Meena Rao', 'hod.an@ndri.res.in', '$2y$10$mBqLzU0Yj7xN6mP9r1S3uO5kG9V7xJ8aB0cD1eF2gH3iJ4kL5mN6o', 2, 6, 'Head of Department (AN)', 'active'),
-(5, 'Dr. Jay Dee', 'jointdirector@ndri.res.in', '$2y$10$mBqLzU0Yj7xN6mP9r1S3uO5kG9V7xJ8aB0cD1eF2gH3iJ4kL5mN6o', 3, 1, 'Joint Director (Research)', 'active');
+(1, 'Dr. Aris Thorne', 'scientist1@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 1, 1, 'Senior Scientist', 'active'),
+(2, 'Dr. Sarah Jenkins', 'scientist2@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 1, 6, 'Scientist', 'active'),
+(3, 'Prof. Rajesh Kumar', 'hod.agb@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 2, 1, 'Head of Department (AGB)', 'active'),
+(4, 'Prof. Meena Rao', 'hod.an@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 2, 6, 'Head of Department (AN)', 'active'),
+(5, 'Dr. Jay Dee', 'jointdirector@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 3, 1, 'Joint Director (Research)', 'active'),
+(6, 'System Administrator', 'admin@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 3, 1, 'System Administrator / Joint Director', 'active')
+ON DUPLICATE KEY UPDATE password = VALUES(password), status = 'active';

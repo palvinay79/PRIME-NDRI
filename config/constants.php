@@ -22,24 +22,22 @@ if (!defined('APP_VERSION')) {
 // Change $subfolder below to your subdirectory or leave '' for root domain.
 // =========================================================================
 if (!defined('BASE_URL')) {
-    // Configure your subfolder here:
-    $subfolder = '/demo/pme';
-
-    $host = $_SERVER['HTTP_HOST'] ?? '';
-    $uri  = $_SERVER['REQUEST_URI'] ?? '';
-    $isLocalDev = (str_contains($host, 'localhost') || str_contains($host, '127.0.0.1') || str_contains($host, 'run.app'));
-
-    if ($isLocalDev && !str_contains($uri, '/demo/pme')) {
-        // Automatic fallback for local container preview
-        define('BASE_URL', '');
-    } elseif (!empty($subfolder)) {
-        define('BASE_URL', rtrim($subfolder, '/'));
+    $envBase = getenv('BASE_URL');
+    if ($envBase !== false && $envBase !== '') {
+        define('BASE_URL', rtrim($envBase, '/'));
     } else {
-        // Auto-detect base folder from SCRIPT_NAME
+        $uri = $_SERVER['REQUEST_URI'] ?? '';
         $scriptPath = $_SERVER['SCRIPT_NAME'] ?? '';
-        $dir = str_replace('\\', '/', dirname($scriptPath));
-        $dir = preg_replace('#/(scientist|hod|joint-director|config|includes|assets)$#i', '', $dir);
-        define('BASE_URL', ($dir === '/' || $dir === '.') ? '' : rtrim($dir, '/'));
+        
+        // If explicitly requested within a /demo/pme subfolder
+        if (str_contains($uri, '/demo/pme')) {
+            define('BASE_URL', '/demo/pme');
+        } else {
+            // Auto-detect base folder from SCRIPT_NAME
+            $dir = str_replace('\\', '/', dirname($scriptPath));
+            $dir = preg_replace('#/(scientist|hod|joint-director|config|includes|assets)$#i', '', $dir);
+            define('BASE_URL', ($dir === '/' || $dir === '.' || $dir === '') ? '' : rtrim($dir, '/'));
+        }
     }
 }
 
