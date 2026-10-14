@@ -105,7 +105,10 @@ include __DIR__ . '/../includes/header.php';
         <h3 class="fw-bold mb-1 text-dark">Research Directorate Executive Dashboard</h3>
         <p class="text-muted small mb-0">Joint Director (Research) Oversight, Institute Research Council (IRC) Gatekeeping & Project Governance</p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex flex-wrap gap-2">
+        <a href="<?= url("/joint-director/clean-database.php") ?>" class="btn btn-outline-danger btn-sm" title="Temporary Database Maintenance & Cleaning Utility">
+            <i class="bi bi-trash3 me-1"></i> Clean Database
+        </a>
         <a href="<?= url("/joint-director/users.php") ?>" class="btn btn-outline-dark btn-sm">
             <i class="bi bi-people-fill me-1"></i> User Management
             <?php if ($adminMetrics['pending_approvals'] > 0): ?>
