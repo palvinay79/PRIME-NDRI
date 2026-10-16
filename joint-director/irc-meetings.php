@@ -85,8 +85,6 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<?= render_flashes() ?>
-
 <!-- Slated Proposals Section -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-3">

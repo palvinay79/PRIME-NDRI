@@ -125,8 +125,6 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<?= render_flashes() ?>
-
 <!-- Department Cards / Table -->
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">

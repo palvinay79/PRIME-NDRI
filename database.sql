@@ -304,6 +304,5 @@ INSERT INTO users (id, name, email, password, role_id, department_id, designatio
 (2, 'Dr. Sarah Jenkins', 'scientist2@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 1, 6, 'Scientist', 'active'),
 (3, 'Prof. Rajesh Kumar', 'hod.agb@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 2, 1, 'Head of Department (AGB)', 'active'),
 (4, 'Prof. Meena Rao', 'hod.an@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 2, 6, 'Head of Department (AN)', 'active'),
-(5, 'Dr. Jay Dee', 'jointdirector@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 3, 1, 'Joint Director (Research)', 'active'),
-(6, 'System Administrator', 'admin@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 3, 1, 'System Administrator / Joint Director', 'active')
+(5, 'Dr. Jay Dee', 'jointdirector@ndri.res.in', '$2y$10$3m4AJfA0m.gQP2BQvkIRGO2oYwYGXzKfnWqZif8.MMCxzQENFdG2C', 3, 1, 'Joint Director (Research)', 'active')
 ON DUPLICATE KEY UPDATE password = VALUES(password), status = 'active';

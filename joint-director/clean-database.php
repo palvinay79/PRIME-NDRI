@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // D. Clean Users (Safely preserving Joint Director / Administrator accounts)
             if ($cleanUsers) {
                 // Delete non-admin users only
-                $stmt = $db->prepare("DELETE FROM users WHERE id != ? AND role_id != ? AND LOWER(email) NOT IN ('jointdirector@ndri.res.in', 'admin@ndri.res.in')");
+                $stmt = $db->prepare("DELETE FROM users WHERE id != ? AND role_id != ?");
                 $stmt->execute([$currentUserId, ROLE_JOINT_DIRECTOR]);
                 $cUsers = $stmt->rowCount();
 
@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cProps = $db->exec("DELETE FROM proposals");
 
             // Delete non-admin users (preserve Joint Director admin)
-            $stmt = $db->prepare("DELETE FROM users WHERE id != ? AND role_id != ? AND LOWER(email) NOT IN ('jointdirector@ndri.res.in', 'admin@ndri.res.in')");
+            $stmt = $db->prepare("DELETE FROM users WHERE id != ? AND role_id != ?");
             $stmt->execute([$currentUserId, ROLE_JOINT_DIRECTOR]);
             $cUsers = $stmt->rowCount();
 

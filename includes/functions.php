@@ -216,10 +216,19 @@ function render_flashes(): string {
 
     $html = '<div class="flashes-container mb-3">';
     foreach ($flashes as $f) {
-        $type = e($f['type']);
-        $msg = e($f['message']);
+        $type = htmlspecialchars($f['type'] ?? 'info', ENT_QUOTES, 'UTF-8');
+        $rawMsg = $f['message'] ?? '';
+
+        // If string contains escaped &lt;strong&gt; or &lt;b&gt;, decode them safely
+        if (str_contains($rawMsg, '&lt;strong&gt;') || str_contains($rawMsg, '&lt;/strong&gt;') || str_contains($rawMsg, '&lt;b&gt;') || str_contains($rawMsg, '&lt;/b&gt;')) {
+            $rawMsg = htmlspecialchars_decode($rawMsg, ENT_QUOTES);
+        }
+
+        // Only allow safe inline formatting tags, strip any scripts or dangerous markup
+        $safeMsg = strip_tags($rawMsg, '<strong><b><em><i><br><span><code><small>');
+
         $html .= "<div class=\"alert alert-{$type} alert-dismissible fade show shadow-sm\" role=\"alert\">
-            {$msg}
+            {$safeMsg}
             <button type=\"button\" class=\"btn-close\" data-bs-dismiss=\"alert\" aria-label=\"Close\"></button>
         </div>";
     }

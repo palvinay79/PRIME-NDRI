@@ -804,46 +804,12 @@ function ensure_schema_compatibility(PDO $pdo): void {
                 }
             } catch (Exception $eR) {}
 
-            // Ensure jointdirector@ndri.res.in exists with role Joint Director and active status
-            $chkJD = $pdo->prepare("SELECT id, password, role_id, status FROM users WHERE LOWER(email) = LOWER(?)");
-            $chkJD->execute(['jointdirector@ndri.res.in']);
-            $jdUser = $chkJD->fetch(PDO::FETCH_ASSOC);
-
-            if (!$jdUser) {
+            // Ensure at least one Joint Director / Administrator account exists
+            $adminCount = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role_id = " . ROLE_JOINT_DIRECTOR)->fetchColumn();
+            if ($adminCount === 0) {
+                // Only seed default Joint Director if no admin exists at all (prevents system lockout while respecting user deletions)
                 $insJD = $pdo->prepare("INSERT INTO users (name, email, password, role_id, department_id, designation, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
                 $insJD->execute(['Dr. Jay Dee', 'jointdirector@ndri.res.in', $defaultValidHash, ROLE_JOINT_DIRECTOR, 1, 'Joint Director (Research)', 'active']);
-            } else {
-                $updates = [];
-                $params = [];
-                if ((int)$jdUser['role_id'] !== ROLE_JOINT_DIRECTOR) {
-                    $updates[] = "role_id = ?";
-                    $params[] = ROLE_JOINT_DIRECTOR;
-                }
-                if ($jdUser['status'] !== 'active') {
-                    $updates[] = "status = 'active'";
-                }
-                if (!password_verify('password123', $jdUser['password']) && in_array($jdUser['password'], $legacyBadHashes, true)) {
-                    $updates[] = "password = ?";
-                    $params[] = $defaultValidHash;
-                }
-                if (!empty($updates)) {
-                    $params[] = $jdUser['id'];
-                    $pdo->prepare("UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?")->execute($params);
-                }
-            }
-
-            // Also ensure admin@ndri.res.in exists as an administrator alias
-            $chkAdmin = $pdo->prepare("SELECT id, password, role_id, status FROM users WHERE LOWER(email) = LOWER(?)");
-            $chkAdmin->execute(['admin@ndri.res.in']);
-            $adminUser = $chkAdmin->fetch(PDO::FETCH_ASSOC);
-
-            if (!$adminUser) {
-                $insAdmin = $pdo->prepare("INSERT INTO users (name, email, password, role_id, department_id, designation, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                $insAdmin->execute(['System Administrator', 'admin@ndri.res.in', $defaultValidHash, ROLE_JOINT_DIRECTOR, 1, 'Joint Director (Research) / Administrator', 'active']);
-            } else {
-                if ($adminUser['status'] !== 'active' || (int)$adminUser['role_id'] !== ROLE_JOINT_DIRECTOR) {
-                    $pdo->prepare("UPDATE users SET role_id = ?, status = 'active' WHERE id = ?")->execute([ROLE_JOINT_DIRECTOR, $adminUser['id']]);
-                }
             }
         } catch (Exception $eUserSync) {}
     } catch (Exception $e) {

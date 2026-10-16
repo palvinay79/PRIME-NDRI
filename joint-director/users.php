@@ -192,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $u = $stmt->fetch();
 
             if ($u) {
-                // Check if user is associated with any proposals or projects
+                // Check if user is associated with any institutional records
                 $stmt = $db->prepare("SELECT COUNT(*) FROM proposals WHERE scientist_id = ?");
                 $stmt->execute([$userId]);
                 $propCount = (int)$stmt->fetchColumn();
@@ -201,17 +201,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$userId]);
                 $projCount = (int)$stmt->fetchColumn();
 
-                if ($propCount > 0 || $projCount > 0) {
-                    // Cannot hard-delete due to institutional research records; deactivate instead
+                $stmt = $db->prepare("SELECT COUNT(*) FROM proposal_status_history WHERE action_by = ?");
+                $stmt->execute([$userId]);
+                $historyCount = (int)$stmt->fetchColumn();
+
+                $stmt = $db->prepare("SELECT COUNT(*) FROM irc_meetings WHERE created_by = ?");
+                $stmt->execute([$userId]);
+                $meetingCount = (int)$stmt->fetchColumn();
+
+                if ($propCount > 0 || $projCount > 0 || $historyCount > 0 || $meetingCount > 0) {
+                    // Cannot hard-delete due to institutional research/governance records; deactivate instead
                     $stmt = $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ?");
                     $stmt->execute([$userId]);
-                    log_audit($currentUserId, 'USER_DEACTIVATED_INSTEAD_OF_DELETE', 'users', $userId, "User {$u['name']} has {$propCount} proposals / {$projCount} projects; deactivated instead of deleted.");
-                    flash('warning', "User <strong>" . e($u['name']) . "</strong> cannot be permanently deleted because they have {$propCount} research proposal(s) and {$projCount} project(s) on file. The account has been deactivated instead.");
+                    log_audit($currentUserId, 'USER_DEACTIVATED_INSTEAD_OF_DELETE', 'users', $userId, "User {$u['name']} has institutional research/governance records; deactivated instead of deleted.");
+                    flash('warning', "User <strong>" . e($u['name']) . "</strong> cannot be permanently deleted because they have associated institutional research or review records on file. The account has been deactivated instead.");
                 } else {
-                    $stmt = $db->prepare("DELETE FROM users WHERE id = ?");
-                    $stmt->execute([$userId]);
-                    log_audit($currentUserId, 'USER_DELETED', 'users', $userId, "Deleted user {$u['name']} (ID: {$userId})");
-                    flash('success', "User <strong>" . e($u['name']) . "</strong> has been permanently removed.");
+                    try {
+                        $db->beginTransaction();
+                        // Clean up secondary non-critical references for this user if any exist
+                        $db->prepare("DELETE FROM proposal_co_pis WHERE email = (SELECT email FROM users WHERE id = ?)")->execute([$userId]);
+                        $db->prepare("DELETE FROM proposal_comments WHERE user_id = ?")->execute([$userId]);
+                        $db->prepare("DELETE FROM progress_report_comments WHERE user_id = ?")->execute([$userId]);
+                        $db->prepare("DELETE FROM irc_decisions WHERE decided_by = ?")->execute([$userId]);
+                        $db->prepare("DELETE FROM audit_logs WHERE user_id = ?")->execute([$userId]);
+
+                        $stmt = $db->prepare("DELETE FROM users WHERE id = ?");
+                        $stmt->execute([$userId]);
+                        $db->commit();
+
+                        log_audit($currentUserId, 'USER_DELETED', 'users', $userId, "Deleted user {$u['name']} (ID: {$userId})");
+                        flash('success', "User <strong>" . e($u['name']) . "</strong> has been permanently removed.");
+                    } catch (Exception $eDel) {
+                        if ($db->inTransaction()) {
+                            $db->rollBack();
+                        }
+                        error_log("Failed deleting user {$userId}: " . $eDel->getMessage());
+                        // If foreign key constraint still blocks hard deletion, gracefully deactivate
+                        $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ?")->execute([$userId]);
+                        log_audit($currentUserId, 'USER_DEACTIVATED_INSTEAD_OF_DELETE', 'users', $userId, "User {$u['name']} deactivated instead of delete due to: " . $eDel->getMessage());
+                        flash('warning', "User <strong>" . e($u['name']) . "</strong> has historical institutional records, so the account has been deactivated instead.");
+                    }
                 }
             }
         }
@@ -379,8 +408,6 @@ include __DIR__ . '/../includes/header.php';
         </button>
     </div>
 </div>
-
-<?= render_flashes() ?>
 
 <!-- Summary Stat Cards -->
 <div class="row g-3 mb-4">
