@@ -519,13 +519,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     flash('success', "Ongoing Project Progress Report ({$proposalNumber}) submitted successfully to Head of Department for IRC review.");
                 }
+                header("Location: " . url("/scientist/proposal-details.php?id={$proposalId}"));
             } else {
-                flash('info', $isEditMode 
-                    ? "Ongoing Project Progress Report ({$proposalNumber}) draft updated successfully." 
-                    : "Ongoing Project Progress Report ({$proposalNumber}) saved as draft.");
+                flash('success', $isEditMode 
+                    ? "Ongoing Project Progress Report ({$proposalNumber}) draft updated successfully. Continuing in edit mode." 
+                    : "Ongoing Project Progress Report ({$proposalNumber}) saved as draft. Continuing in edit mode.");
+                header("Location: " . url("/scientist/ongoing-projects.php?id={$proposalId}"));
             }
-
-            header("Location: " . url("/scientist/proposal-details.php?id={$proposalId}"));
             exit;
 
         } catch (Throwable $e) {

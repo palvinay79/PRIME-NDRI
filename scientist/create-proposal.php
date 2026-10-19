@@ -314,11 +314,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     flash('success', "Proposal {$proposalNumber} submitted successfully to Head of Department.");
                 }
+                header("Location: " . url("/scientist/proposal-details.php?id={$proposalId}"));
             } else {
-                flash('info', "Proposal {$proposalNumber} saved as draft.");
+                flash('success', "Proposal {$proposalNumber} saved as draft. Continuing in edit mode.");
+                header("Location: " . url("/scientist/edit-proposal.php?id={$proposalId}"));
             }
-
-            header("Location: " . url("/scientist/proposal-details.php?id={$proposalId}"));
             exit;
 
         } catch (Exception $e) {
@@ -894,7 +894,7 @@ include __DIR__ . '/../includes/header.php';
             <a href="<?= $isHod ? url("/hod/dashboard.php") : url("/scientist/proposals.php") ?>" class="btn btn-outline-secondary">Cancel</a>
             <div class="d-flex gap-2">
                 <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="document.getElementById('submit_action_hidden').value = 'draft'; window.isDraftAction = true;">
-                    <i class="bi bi-save me-1"></i> Save as Draft
+                    <i class="bi bi-save me-1"></i> Save Changes (Draft)
                 </button>
                 <button type="submit" name="submit_action" value="submit" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" onclick="document.getElementById('submit_action_hidden').value = 'submit'; window.isDraftAction = false;">
                     <i class="bi bi-send-check me-1"></i> <?= $isHod ? 'Submit to Joint Director' : 'Submit to HOD' ?>

@@ -446,11 +446,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     flash('success', "Completion Project dossier ({$projectCode}) submitted successfully to Head of Department.");
                 }
+                header("Location: " . url("/scientist/proposal-details.php?id={$proposalId}"));
             } else {
-                flash('info', "Completion Project dossier ({$projectCode}) saved as draft.");
+                flash('success', "Completion Project dossier ({$projectCode}) saved as draft. Continuing in edit mode.");
+                header("Location: " . url("/scientist/create-completed-proposal.php?id={$proposalId}"));
             }
-
-            header("Location: " . url("/scientist/proposal-details.php?id={$proposalId}"));
             exit;
 
         } catch (Exception $e) {

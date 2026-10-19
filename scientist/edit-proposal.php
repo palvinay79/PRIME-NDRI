@@ -383,15 +383,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     flash('success', "Proposal {$proposal['proposal_number']} has been successfully resubmitted to Head of Department for review.");
                 }
+                header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
             } elseif ($prevStatus === STATUS_FORWARDED_JD && $isHod) {
                 flash('success', "Proposal {$proposal['proposal_number']} was successfully updated and remains submitted to Joint Director for review.");
+                header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
             } elseif ($prevStatus === STATUS_SUBMITTED_HOD) {
                 flash('success', "Proposal {$proposal['proposal_number']} was successfully updated and remains submitted to Head of Department for review.");
+                header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
             } else {
-                flash('info', "Draft proposal changes saved successfully.");
+                flash('success', "Draft proposal changes saved successfully. Continuing in edit mode.");
+                header("Location: " . url("/scientist/edit-proposal.php?id={$id}"));
             }
-
-            header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
             exit;
 
         } catch (Exception $e) {

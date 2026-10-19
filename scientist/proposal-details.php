@@ -134,7 +134,13 @@ include __DIR__ . '/../includes/header.php';
 
                 <?php if (can_edit_proposal($proposal)): 
                     $editDetailUrl = url("/scientist/edit-proposal.php?id=" . $proposal['id']);
-                    $editDetailLabel = ($proposal['current_status'] === STATUS_SUBMITTED_HOD) ? 'Edit Proposal' : 'Edit & Resubmit';
+                    if ($proposal['current_status'] === STATUS_DRAFT) {
+                        $editDetailLabel = 'Edit Draft Proposal';
+                    } elseif ($proposal['current_status'] === STATUS_SUBMITTED_HOD) {
+                        $editDetailLabel = 'Edit Proposal';
+                    } else {
+                        $editDetailLabel = 'Edit & Resubmit';
+                    }
                     if (($proposal['proposal_category'] ?? '') === 'ongoing') {
                         $editDetailUrl = url("/scientist/ongoing-projects.php?id=" . $proposal['id']);
                         $editDetailLabel = ($proposal['current_status'] === STATUS_DRAFT) ? 'Edit Progress Report Draft' : 'Edit & Resubmit Report';
