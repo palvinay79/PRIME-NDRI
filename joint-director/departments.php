@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newDeptId = (int)$db->lastInsertId();
 
                 log_audit($currentUserId, 'DEPARTMENT_CREATED', 'departments', $newDeptId, "Created department {$code} - {$name}");
-                flash('success', "Department <strong>" . e($code) . " (" . e($name) . ")</strong> created successfully.");
+                flash('success', "Department {$code} ({$name}) created successfully.");
             }
         }
         redirect('/joint-director/departments.php');
@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$code, $name, $deptId]);
 
                 log_audit($currentUserId, 'DEPARTMENT_UPDATED', 'departments', $deptId, "Updated department {$code} - {$name}");
-                flash('success', "Department <strong>" . e($code) . "</strong> updated successfully.");
+                flash('success', "Department {$code} updated successfully.");
             }
         }
         redirect('/joint-director/departments.php');
@@ -101,7 +101,7 @@ $sql = "SELECT d.*,
                (SELECT COUNT(*) FROM users WHERE department_id = d.id AND role_id = " . ROLE_SCIENTIST . ") as scientists_count,
                (SELECT COUNT(*) FROM users WHERE department_id = d.id AND role_id = " . ROLE_HOD . ") as hods_count,
                (SELECT u.name FROM users u WHERE u.department_id = d.id AND u.role_id = " . ROLE_HOD . " AND u.status = 'active' LIMIT 1) as active_hod_name,
-               (SELECT COUNT(*) FROM proposals WHERE department_id = d.id) as proposals_count,
+               (SELECT COUNT(*) FROM proposals WHERE department_id = d.id AND LOWER(TRIM(current_status)) != 'draft') as proposals_count,
                (SELECT COUNT(*) FROM projects pr JOIN proposals p ON pr.proposal_id = p.id WHERE p.department_id = d.id AND pr.project_status = 'Active') as active_projects_count
         FROM departments d
         ORDER BY d.department_name ASC";

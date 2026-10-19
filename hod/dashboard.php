@@ -20,8 +20,8 @@ $stmt = $db->prepare("SELECT * FROM departments WHERE id = ?");
 $stmt->execute([$deptId]);
 $department = $stmt->fetch();
 
-// Status counts for this department
-$stmt = $db->prepare("SELECT current_status, COUNT(*) as cnt FROM proposals WHERE department_id = ? GROUP BY current_status");
+// Status counts for this department (strictly excluding private drafts; HOD only tracks submitted/reviewed proposals)
+$stmt = $db->prepare("SELECT current_status, COUNT(*) as cnt FROM proposals WHERE department_id = ? AND LOWER(TRIM(current_status)) != 'draft' GROUP BY current_status");
 $stmt->execute([$deptId]);
 $statusCounts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
@@ -35,7 +35,7 @@ $totalDept = array_sum($statusCounts);
 $stmtCat = $db->prepare("
     SELECT COALESCE(proposal_category, 'new') as cat, COUNT(*) as cnt
     FROM proposals
-    WHERE department_id = ? AND current_status = ?
+    WHERE department_id = ? AND current_status = ? AND LOWER(TRIM(current_status)) != 'draft'
     GROUP BY COALESCE(proposal_category, 'new')
 ");
 $stmtCat->execute([$deptId, STATUS_SUBMITTED_HOD]);
@@ -44,33 +44,33 @@ $pendingProgressCount = $pendingByCat['ongoing'] ?? 0;
 $pendingNewCount = $pendingByCat['new'] ?? 0;
 $pendingCompletedCount = $pendingByCat['completed'] ?? 0;
 
-// Pending Review Proposals for this HOD
+// Pending Review Proposals for this HOD (strictly excluding any drafts)
 $stmt = $db->prepare("SELECT p.*, u.name as scientist_name, u.designation as scientist_designation
                       FROM proposals p
                       JOIN users u ON p.scientist_id = u.id
-                      WHERE p.department_id = ? AND p.current_status = ?
+                      WHERE p.department_id = ? AND p.current_status = ? AND LOWER(TRIM(p.current_status)) != 'draft'
                       ORDER BY p.submitted_at ASC");
 $stmt->execute([$deptId, STATUS_SUBMITTED_HOD]);
 $pendingProposals = $stmt->fetchAll();
 
-// Recent proposals in department
+// Recent proposals in department (strictly excluding private Drafts)
 $stmt = $db->prepare("SELECT p.*, u.name as scientist_name
                       FROM proposals p
                       JOIN users u ON p.scientist_id = u.id
-                      WHERE p.department_id = ?
+                      WHERE p.department_id = ? AND LOWER(TRIM(p.current_status)) != 'draft'
                       ORDER BY p.updated_at DESC LIMIT 5");
 $stmt->execute([$deptId]);
 $recentProposals = $stmt->fetchAll();
 
-// HOD's own research submissions (forwarded directly to Joint Director)
+// HOD's own research submissions sent to Joint Director (excluding unsubmitted drafts)
 $stmtMy = $db->prepare("SELECT p.*, d.department_name, d.department_code
                         FROM proposals p
                         LEFT JOIN departments d ON p.department_id = d.id
-                        WHERE p.scientist_id = ?
+                        WHERE p.scientist_id = ? AND LOWER(TRIM(p.current_status)) != 'draft'
                         ORDER BY p.updated_at DESC LIMIT 5");
 $stmtMy->execute([$user['id']]);
 $mySubmissions = $stmtMy->fetchAll();
-$mySubmissionsCount = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE scientist_id = " . (int)$user['id'])->fetchColumn();
+$mySubmissionsCount = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE scientist_id = " . (int)$user['id'] . " AND LOWER(TRIM(current_status)) != 'draft'")->fetchColumn();
 
 include __DIR__ . '/../includes/header.php';
 ?>

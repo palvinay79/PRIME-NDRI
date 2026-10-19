@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $db->exec("UPDATE proposals SET linked_project_id = NULL, current_status = 'Draft' WHERE current_status = 'Approved / Active'");
                 }
 
-                $cleanedItems[] = "<strong>{$cProj}</strong> Projects, <strong>" . ($cRep + $cComp) . "</strong> Reports";
+                $cleanedItems[] = "{$cProj} Projects, " . ($cRep + $cComp) . " Reports";
             }
 
             // B. Clean Proposals & Review Trails
@@ -69,14 +69,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $cHistory = $db->exec("DELETE FROM proposal_status_history");
                 $cProps = $db->exec("DELETE FROM proposals");
 
-                $cleanedItems[] = "<strong>{$cProps}</strong> Proposals (and associated review trails, documents, and co-PIs)";
+                $cleanedItems[] = "{$cProps} Proposals (and associated review trails, documents, and Co-PIs)";
             }
 
             // C. Clean IRC Meetings & Decisions
             if ($cleanMeetings) {
                 $cDec = $db->exec("DELETE FROM irc_decisions");
                 $cMeet = $db->exec("DELETE FROM irc_meetings");
-                $cleanedItems[] = "<strong>{$cMeet}</strong> IRC Meetings & <strong>{$cDec}</strong> Decisions";
+                $cleanedItems[] = "{$cMeet} IRC Meetings & {$cDec} Decisions";
             }
 
             // D. Clean Users (Safely preserving Joint Director / Administrator accounts)
@@ -90,13 +90,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("UPDATE proposals SET scientist_id = ? WHERE scientist_id NOT IN (SELECT id FROM users)")->execute([$currentUserId]);
                 $db->prepare("UPDATE projects SET scientist_id = ? WHERE scientist_id NOT IN (SELECT id FROM users)")->execute([$currentUserId]);
 
-                $cleanedItems[] = "<strong>{$cUsers}</strong> Non-Admin Users (Your Joint Director admin account was safely preserved)";
+                $cleanedItems[] = "{$cUsers} Non-Admin Users (Your Joint Director admin account was safely preserved)";
             }
 
             // E. Clean Audit Logs
             if ($cleanLogs) {
                 $cLogs = $db->exec("DELETE FROM audit_logs");
-                $cleanedItems[] = "<strong>{$cLogs}</strong> Audit Log Records";
+                $cleanedItems[] = "{$cLogs} Audit Log Records";
             }
 
             $db->commit();

@@ -25,7 +25,7 @@ $sql = "SELECT p.*, u.name as scientist_name, d.department_name, d.department_co
         FROM proposals p
         JOIN users u ON p.scientist_id = u.id
         JOIN departments d ON p.department_id = d.id
-        WHERE p.current_status != 'Draft'";
+        WHERE LOWER(TRIM(p.current_status)) != 'draft'";
 $params = [];
 
 // Approved active projects belong to the Active Projects registry.
@@ -33,8 +33,12 @@ $params = [];
 if (empty($statusFilter)) {
     $sql .= " AND p.current_status != 'Approved / Project Active'";
 } else {
-    $sql .= " AND p.current_status = ?";
-    $params[] = $statusFilter;
+    if (strtolower(trim($statusFilter)) === 'draft') {
+        $sql .= " AND 1=0"; // Drafts are strictly not visible to Joint Director
+    } else {
+        $sql .= " AND p.current_status = ?";
+        $params[] = $statusFilter;
+    }
 }
 
 if ($categoryFilter === 'new') {
@@ -65,7 +69,7 @@ $stmt->execute($params);
 $proposals = $stmt->fetchAll();
 
 // Counts for review queue tabs (strictly excluding drafts and already-approved active projects)
-$countBase = "FROM proposals WHERE current_status != 'Draft' AND current_status != 'Approved / Project Active'";
+$countBase = "FROM proposals WHERE LOWER(TRIM(current_status)) != 'draft' AND current_status != 'Approved / Project Active'";
 $countAll = (int)$db->query("SELECT COUNT(*) " . $countBase)->fetchColumn();
 $countNew = (int)$db->query("SELECT COUNT(*) " . $countBase . " AND (proposal_category = 'new' OR proposal_category IS NULL)")->fetchColumn();
 $countOngoing = (int)$db->query("SELECT COUNT(*) " . $countBase . " AND proposal_category = 'ongoing'")->fetchColumn();

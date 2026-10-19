@@ -22,7 +22,7 @@ $metrics = [
     'total_budget_sanctioned' => 0.0
 ];
 
-$stmt = $db->query("SELECT current_status, COUNT(*) as cnt FROM proposals GROUP BY current_status");
+$stmt = $db->query("SELECT current_status, COUNT(*) as cnt FROM proposals WHERE LOWER(TRIM(current_status)) != 'draft' GROUP BY current_status");
 $statusCounts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
 $metrics['pending_jd'] = $statusCounts[STATUS_FORWARDED_JD] ?? 0;
@@ -50,12 +50,12 @@ foreach ($stmt->fetchAll() as $r) {
 }
 $adminMetrics['pending_approvals'] = (int)$db->query("SELECT COUNT(*) FROM users WHERE status = 'pending'")->fetchColumn();
 
-// Proposals Pending Initial JD Review
+// Proposals Pending Initial JD Review (strictly excluding drafts)
 $stmt = $db->prepare("SELECT p.*, u.name as scientist_name, d.department_name, d.department_code
                       FROM proposals p
                       JOIN users u ON p.scientist_id = u.id
                       JOIN departments d ON p.department_id = d.id
-                      WHERE p.current_status = ?
+                      WHERE p.current_status = ? AND LOWER(TRIM(p.current_status)) != 'draft'
                       ORDER BY p.updated_at ASC");
 $stmt->execute([STATUS_FORWARDED_JD]);
 $pendingJdProposals = $stmt->fetchAll();
@@ -78,7 +78,7 @@ unset($p);
 $stmtJdCat = $db->prepare("
     SELECT COALESCE(proposal_category, 'new') as cat, COUNT(*) as cnt
     FROM proposals
-    WHERE current_status = ?
+    WHERE current_status = ? AND LOWER(TRIM(current_status)) != 'draft'
     GROUP BY COALESCE(proposal_category, 'new')
 ");
 $stmtJdCat->execute([STATUS_FORWARDED_JD]);
@@ -92,7 +92,7 @@ $stmt = $db->prepare("SELECT p.*, u.name as scientist_name, d.department_name, d
                       FROM proposals p
                       JOIN users u ON p.scientist_id = u.id
                       JOIN departments d ON p.department_id = d.id
-                      WHERE p.current_status = ?
+                      WHERE p.current_status = ? AND LOWER(TRIM(p.current_status)) != 'draft'
                       ORDER BY p.updated_at ASC");
 $stmt->execute([STATUS_APPROVED_IRC]);
 $ircProposals = $stmt->fetchAll();

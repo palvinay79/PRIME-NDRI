@@ -13,24 +13,24 @@ require_role(ROLE_JOINT_DIRECTOR);
 $pageTitle = 'Institutional Research Analytics';
 $db = get_db();
 
-// 1. Status breakdown
-$statusData = $db->query("SELECT current_status, COUNT(*) as cnt FROM proposals GROUP BY current_status")->fetchAll(PDO::FETCH_KEY_PAIR);
+// 1. Status breakdown (strictly excluding private drafts)
+$statusData = $db->query("SELECT current_status, COUNT(*) as cnt FROM proposals WHERE LOWER(TRIM(current_status)) != 'draft' GROUP BY current_status")->fetchAll(PDO::FETCH_KEY_PAIR);
 
 // 2. Department-wise count and proposed budget
 $deptStats = $db->query("SELECT d.department_code, d.department_name, COUNT(p.id) as prop_count, COALESCE(SUM(p.proposed_budget), 0) as total_budget
                          FROM departments d
-                         LEFT JOIN proposals p ON d.id = p.department_id
+                         LEFT JOIN proposals p ON d.id = p.department_id AND LOWER(TRIM(p.current_status)) != 'draft'
                          GROUP BY d.id
                          ORDER BY prop_count DESC")->fetchAll();
 
 // 3. TRL distribution
-$trlStats = $db->query("SELECT trl_level, COUNT(*) as cnt FROM proposals GROUP BY trl_level ORDER BY trl_level ASC")->fetchAll(PDO::FETCH_KEY_PAIR);
+$trlStats = $db->query("SELECT trl_level, COUNT(*) as cnt FROM proposals WHERE LOWER(TRIM(current_status)) != 'draft' GROUP BY trl_level ORDER BY trl_level ASC")->fetchAll(PDO::FETCH_KEY_PAIR);
 
 // 4. Priority Area distribution
-$priorityStats = $db->query("SELECT institute_priority_area, COUNT(*) as cnt FROM proposals WHERE institute_priority_area != '' GROUP BY institute_priority_area ORDER BY cnt DESC LIMIT 6")->fetchAll();
+$priorityStats = $db->query("SELECT institute_priority_area, COUNT(*) as cnt FROM proposals WHERE institute_priority_area != '' AND LOWER(TRIM(current_status)) != 'draft' GROUP BY institute_priority_area ORDER BY cnt DESC LIMIT 6")->fetchAll();
 
 // 5. Overall approval calculation
-$totalProposals = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE current_status != 'Draft'")->fetchColumn();
+$totalProposals = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE LOWER(TRIM(current_status)) != 'draft'")->fetchColumn();
 $approvedProposals = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE current_status IN ('Approved / Active', 'Completed')")->fetchColumn();
 $approvalRate = ($totalProposals > 0) ? round(($approvedProposals / $totalProposals) * 100, 1) : 0;
 

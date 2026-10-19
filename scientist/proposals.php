@@ -24,11 +24,21 @@ if (!in_array($categoryFilter, ['all', 'new', 'ongoing', 'completed'])) {
     $categoryFilter = 'all';
 }
 
+$userEmail = trim($currentUser['email'] ?? '');
+$userName = trim($currentUser['name'] ?? '');
+
 $sql = "SELECT p.*, d.department_name, d.department_code
         FROM proposals p
         LEFT JOIN departments d ON p.department_id = d.id
-        WHERE p.scientist_id = ?";
-$params = [$userId];
+        WHERE (
+            p.scientist_id = ? OR 
+            (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+                SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+                WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+                   OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+            ))
+        )";
+$params = [$userId, $userEmail, $userName];
 
 if ($categoryFilter === 'new') {
     $sql .= " AND (p.proposal_category = 'new' OR p.proposal_category IS NULL OR p.proposal_category = '')";
@@ -66,11 +76,62 @@ $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $proposals = $stmt->fetchAll();
 
-// Accurate counts for category tabs
-$countAll = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE scientist_id = {$userId}")->fetchColumn();
-$countNew = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE scientist_id = {$userId} AND (proposal_category = 'new' OR proposal_category IS NULL OR proposal_category = '')")->fetchColumn();
-$countOngoing = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE scientist_id = {$userId} AND proposal_category = 'ongoing'")->fetchColumn();
-$countCompleted = (int)$db->query("SELECT COUNT(*) FROM proposals WHERE scientist_id = {$userId} AND proposal_category = 'completed'")->fetchColumn();
+// Accurate counts for category tabs (Lead PI or Co-PI)
+$countStmt = $db->prepare("
+    SELECT COUNT(DISTINCT p.id) FROM proposals p 
+    WHERE (
+        p.scientist_id = ? OR 
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
+    )
+");
+$countStmt->execute([$userId, $userEmail, $userName]);
+$countAll = (int)$countStmt->fetchColumn();
+
+$countNewStmt = $db->prepare("
+    SELECT COUNT(DISTINCT p.id) FROM proposals p 
+    WHERE (
+        p.scientist_id = ? OR 
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
+    ) AND (p.proposal_category = 'new' OR p.proposal_category IS NULL OR p.proposal_category = '')
+");
+$countNewStmt->execute([$userId, $userEmail, $userName]);
+$countNew = (int)$countNewStmt->fetchColumn();
+
+$countOngoingStmt = $db->prepare("
+    SELECT COUNT(DISTINCT p.id) FROM proposals p 
+    WHERE (
+        p.scientist_id = ? OR 
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
+    ) AND p.proposal_category = 'ongoing'
+");
+$countOngoingStmt->execute([$userId, $userEmail, $userName]);
+$countOngoing = (int)$countOngoingStmt->fetchColumn();
+
+$countCompletedStmt = $db->prepare("
+    SELECT COUNT(DISTINCT p.id) FROM proposals p 
+    WHERE (
+        p.scientist_id = ? OR 
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
+    ) AND p.proposal_category = 'completed'
+");
+$countCompletedStmt->execute([$userId, $userEmail, $userName]);
+$countCompleted = (int)$countCompletedStmt->fetchColumn();
 
 include __DIR__ . '/../includes/header.php';
 ?>

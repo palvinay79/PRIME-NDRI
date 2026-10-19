@@ -300,7 +300,7 @@ include __DIR__ . '/../includes/header.php';
                             </td>
                             <td>
                                 <div class="small text-muted"><?= e($d['recorded_by_name'] ?? 'Joint Director') ?></div>
-                                <div class="small text-muted" style="font-size: 0.7rem;"><?= date('d M Y, h:i A', strtotime($d['decided_at'])) ?></div>
+                                <div class="small text-muted" style="font-size: 0.7rem;"><?= format_datetime($d['decided_at']) ?></div>
                             </td>
                             <td class="text-end">
                                 <a href="<?= url("/scientist/proposal-details.php?id=" . $d['proposal_id']) ?>" class="btn btn-xs btn-outline-secondary">

@@ -285,6 +285,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$matchedProject) {
         $error = "Please select a valid active ongoing project from your assigned list.";
+    } elseif ((int)$matchedProject['scientist_id'] !== $userId && !$isHod) {
+        $error = "Access Restricted: You are assigned as a Co-PI on this project (View Only). Only the Principal Investigator (Lead PI) can submit progress reports.";
     } elseif ($submissionAction === 'submit') {
         if (empty($reportPeriodCycle)) {
             $error = "Please select the Progress Reporting Cycle (October/November or March/April).";
@@ -684,6 +686,9 @@ include __DIR__ . '/../includes/header.php';
 
 <?php if ($selectedProject): 
     $isFunding = (($selectedProject['project_type'] ?? '') === 'funding_agency');
+    $isLeadPi = ((int)$selectedProject['scientist_id'] === $userId);
+    $isHodOfDept = ($isHod && (int)$selectedProject['department_id'] === (int)($currentUser['department_id'] ?? 0));
+    $canSubmitReport = ($isLeadPi || $isHodOfDept);
     $durationMonths = 0;
     if (!empty($selectedProject['start_date']) && !empty($selectedProject['end_date'])) {
         $d1 = new DateTime($selectedProject['start_date']);
@@ -692,8 +697,23 @@ include __DIR__ . '/../includes/header.php';
         $durationMonths = ($interval->y * 12) + $interval->m;
     }
 ?>
+<?php if (!$canSubmitReport): ?>
+    <div class="alert alert-info border-info-subtle shadow-xs p-3 mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-eye-fill fs-4 text-info me-2"></i>
+            <div>
+                <strong>Co-PI View-Only Mode:</strong> You are associated as a Co-Principal Investigator on project <strong><?= e($selectedProject['project_number']) ?></strong>.
+                As per institutional guidelines, progress reports can only be submitted by the Lead PI (<?= e($selectedProject['scientist_name'] ?? 'Principal Investigator') ?>).
+            </div>
+        </div>
+        <a href="<?= url("/scientist/view-progress.php?project_id=" . $selectedProject['id']) ?>" class="btn btn-sm btn-info text-white">
+            <i class="bi bi-clock-history me-1"></i> View Reports & Observations
+        </a>
+    </div>
+<?php endif; ?>
 <form method="POST" action="<?= url("/scientist/ongoing-projects.php" . ($isEditMode ? "?id=" . $editProposalId : "")) ?>" id="ongoing-form" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+    <input type="hidden" name="submit_action" id="submit_action_hidden" value="draft">
     <input type="hidden" name="project_id" id="hidden_project_id" value="<?= (int)$selectedProject['id'] ?>">
     <?php if ($isEditMode): ?>
         <input type="hidden" name="proposal_id" value="<?= (int)$editProposalId ?>">
@@ -1012,18 +1032,27 @@ include __DIR__ . '/../includes/header.php';
                         : 'Scientist &rarr; Head of Department (HOD) &rarr; Joint Director (Directorate) &rarr; IRC Council Approval.' ?>
                 </div>
             </div>
-            <div class="d-flex gap-2">
-                <?php if ($isEditMode): ?>
-                    <a href="<?= $isHod ? url("/scientist/proposals.php?category=ongoing") : url("/scientist/proposals.php?category=ongoing") ?>" class="btn btn-outline-secondary px-3">
-                        <i class="bi bi-x-circle me-1"></i> Discard Changes
+            <div class="d-flex gap-2 align-items-center">
+                <?php if ($canSubmitReport): ?>
+                    <?php if ($isEditMode): ?>
+                        <a href="<?= $isHod ? url("/scientist/proposals.php?category=ongoing") : url("/scientist/proposals.php?category=ongoing") ?>" class="btn btn-outline-secondary px-3">
+                            <i class="bi bi-x-circle me-1"></i> Discard Changes
+                        </a>
+                    <?php endif; ?>
+                    <button type="submit" name="submit_action" value="draft" class="btn btn-outline-secondary px-3" formnovalidate onclick="const el = document.getElementById('submit_action_hidden'); if(el) el.value = 'draft'; window.isDraftAction = true;">
+                        <i class="bi bi-save me-1"></i> <?= $isEditMode ? 'Update Draft' : 'Save as Draft' ?>
+                    </button>
+                    <button type="submit" name="submit_action" value="submit" class="btn btn-primary px-4 shadow-sm" style="background-color: #1a365d; border-color: #1a365d;" onclick="const el = document.getElementById('submit_action_hidden'); if(el) el.value = 'submit'; window.isDraftAction = false;">
+                        <i class="bi bi-send-fill me-1"></i> <?= $isHod ? 'Submit Progress Report to Joint Director' : 'Submit Progress Report to HOD' ?>
+                    </button>
+                <?php else: ?>
+                    <span class="badge bg-secondary-subtle text-secondary border px-3 py-2 font-monospace">
+                        <i class="bi bi-lock me-1"></i> Co-PI View-Only Mode
+                    </span>
+                    <a href="<?= url("/scientist/view-progress.php?project_id=" . $selectedProject['id']) ?>" class="btn btn-primary px-3" style="background-color: #1a365d; border-color: #1a365d;">
+                        <i class="bi bi-eye me-1"></i> View Reports & Observations
                     </a>
                 <?php endif; ?>
-                <button type="submit" name="submit_action" value="draft" class="btn btn-outline-secondary px-3" formnovalidate onclick="window.isDraftAction = true;">
-                    <i class="bi bi-save me-1"></i> <?= $isEditMode ? 'Update Draft' : 'Save as Draft' ?>
-                </button>
-                <button type="submit" name="submit_action" value="submit" class="btn btn-primary px-4 shadow-sm" style="background-color: #1a365d; border-color: #1a365d;" onclick="window.isDraftAction = false;">
-                    <i class="bi bi-send-fill me-1"></i> <?= $isHod ? 'Submit Progress Report to Joint Director' : 'Submit Progress Report to HOD' ?>
-                </button>
             </div>
         </div>
     </div>
@@ -1074,6 +1103,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const submitBtn = e.submitter || document.activeElement;
             const isDraft = window.isDraftAction || (submitBtn && (submitBtn.value === 'draft' || submitBtn.getAttribute('value') === 'draft'));
             if (isDraft) {
+                const draftActionInput = document.getElementById('submit_action_hidden');
+                if (draftActionInput) draftActionInput.value = 'draft';
                 form.querySelectorAll('[required]').forEach(el => el.removeAttribute('required'));
                 return true;
             }

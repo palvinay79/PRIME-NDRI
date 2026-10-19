@@ -36,9 +36,9 @@ if (!$proposal) {
     exit;
 }
 
-if (!can_jd_initial_review($proposal)) {
+if (strtolower(trim($proposal['current_status'] ?? '')) === 'draft' || !can_jd_initial_review($proposal)) {
     flash('warning', "Proposal {$proposal['proposal_number']} is in status '{$proposal['current_status']}' and not currently awaiting Joint Director initial review.");
-    header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
+    header("Location: " . url("/joint-director/proposals.php"));
     exit;
 }
 

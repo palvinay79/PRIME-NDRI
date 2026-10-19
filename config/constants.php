@@ -107,8 +107,12 @@ if (!defined('MAX_FILE_SIZE')) {
 $ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'png', 'jpg'];
 
 // Project Categories
-define('PROJECT_TYPE_IN_HOUSE', 'in_house');
-define('PROJECT_TYPE_FUNDING_AGENCY', 'funding_agency');
+if (!defined('PROJECT_TYPE_IN_HOUSE')) {
+    define('PROJECT_TYPE_IN_HOUSE', 'in_house');
+}
+if (!defined('PROJECT_TYPE_FUNDING_AGENCY')) {
+    define('PROJECT_TYPE_FUNDING_AGENCY', 'funding_agency');
+}
 
 // Priority Areas (Institute & National)
 // Institute Priority Area is strictly Program A to F with full descriptions (Mandatory)

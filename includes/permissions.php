@@ -504,21 +504,29 @@ function can_view_proposal(array $proposal): bool {
     $userId = current_user_id();
     $deptId = current_user_department_id();
 
-    if ($roleId === ROLE_JOINT_DIRECTOR) {
+    // Owner (the scientist who created the draft or proposal) can always view their proposal
+    if ($userId && (int)($proposal['scientist_id'] ?? 0) === (int)$userId) {
         return true;
     }
 
-    // Owner can always view their proposal
-    if ($userId && (int)($proposal['scientist_id'] ?? 0) === (int)$userId) {
+    // A proposal in 'Draft' status is strictly private to its owner.
+    // It must NOT be visible to HOD, Joint Director, or Co-PIs until officially submitted!
+    $isDraft = (strtolower(trim($proposal['current_status'] ?? '')) === 'draft');
+    if ($isDraft) {
+        return false;
+    }
+
+    // Co-PIs can view the submitted proposal
+    if ($userId && !empty($proposal['id']) && is_user_proposal_copi((int)$proposal['id'], $userId)) {
+        return true;
+    }
+
+    if ($roleId === ROLE_JOINT_DIRECTOR) {
         return true;
     }
 
     if ($roleId === ROLE_HOD) {
         return (int)($proposal['department_id'] ?? 0) === (int)$deptId;
-    }
-
-    if ($roleId === ROLE_SCIENTIST) {
-        return (int)($proposal['scientist_id'] ?? 0) === (int)$userId;
     }
 
     return false;

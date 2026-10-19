@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     log_audit($currentUserId, 'USER_CREATED', 'users', $newUserId, "Created {$roleName} account for {$name} ({$email})");
 
-                    flash('success', "User <strong>" . e($name) . "</strong> created successfully as <strong>" . e($roleName) . "</strong>. They can now log in with email <code>" . e($email) . "</code>.");
+                    flash('success', "User '{$name}' created successfully as {$roleName}. They can now log in with email {$email}.");
                 } catch (Exception $e) {
                     error_log("Error creating user: " . $e->getMessage());
                     flash('danger', "Failed to create user: " . e($e->getMessage()));
@@ -127,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     log_audit($currentUserId, 'USER_UPDATED', 'users', $userId, "Updated profile for {$name} (Role: " . get_role_name_by_id($roleId) . ", Phone: " . ($mobileNo ?: 'N/A') . ")");
-                    flash('success', "User profile for <strong>" . e($name) . "</strong> has been updated successfully.");
+                    flash('success', "User profile for '{$name}' has been updated successfully.");
                 }
             }
         }
@@ -151,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $targetUser = $stmt->fetch();
 
             log_audit($currentUserId, 'USER_PASSWORD_RESET', 'users', $userId, "Admin reset password for user {$targetUser['email']}");
-            flash('success', "Password for <strong>" . e($targetUser['name'] ?? 'User') . "</strong> has been reset successfully.");
+            flash('success', "Password for '" . ($targetUser['name'] ?? 'User') . "' has been reset successfully.");
         }
         redirect('/joint-director/users.php');
     }
@@ -173,13 +173,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$newStatus, $userId]);
 
                 log_audit($currentUserId, 'USER_STATUS_TOGGLED', 'users', $userId, "Changed status of {$u['name']} to {$newStatus}");
-                flash('info', "Account status for <strong>" . e($u['name']) . "</strong> set to <strong>" . ucfirst($newStatus) . "</strong>.");
+                flash('info', "Account status for '{$u['name']}' set to " . ucfirst($newStatus) . ".");
             }
         }
         redirect('/joint-director/users.php');
     }
 
-    // 5. Delete User
+    // 5. Delete User (Hard Delete permanently, cleaning up foreign key references)
     if ($action === 'delete_user') {
         $userId = (int)($_POST['user_id'] ?? 0);
         if ($userId <= 0) {
@@ -187,61 +187,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($userId === $currentUserId) {
             flash('danger', 'You cannot delete your own account.');
         } else {
-            $stmt = $db->prepare("SELECT name FROM users WHERE id = ?");
+            $stmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
             $stmt->execute([$userId]);
             $u = $stmt->fetch();
 
             if ($u) {
-                // Check if user is associated with any institutional records
-                $stmt = $db->prepare("SELECT COUNT(*) FROM proposals WHERE scientist_id = ?");
-                $stmt->execute([$userId]);
-                $propCount = (int)$stmt->fetchColumn();
+                try {
+                    $db->beginTransaction();
+                    $uEmail = trim($u['email'] ?? '');
 
-                $stmt = $db->prepare("SELECT COUNT(*) FROM projects WHERE scientist_id = ?");
-                $stmt->execute([$userId]);
-                $projCount = (int)$stmt->fetchColumn();
-
-                $stmt = $db->prepare("SELECT COUNT(*) FROM proposal_status_history WHERE action_by = ?");
-                $stmt->execute([$userId]);
-                $historyCount = (int)$stmt->fetchColumn();
-
-                $stmt = $db->prepare("SELECT COUNT(*) FROM irc_meetings WHERE created_by = ?");
-                $stmt->execute([$userId]);
-                $meetingCount = (int)$stmt->fetchColumn();
-
-                if ($propCount > 0 || $projCount > 0 || $historyCount > 0 || $meetingCount > 0) {
-                    // Cannot hard-delete due to institutional research/governance records; deactivate instead
-                    $stmt = $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ?");
-                    $stmt->execute([$userId]);
-                    log_audit($currentUserId, 'USER_DEACTIVATED_INSTEAD_OF_DELETE', 'users', $userId, "User {$u['name']} has institutional research/governance records; deactivated instead of deleted.");
-                    flash('warning', "User <strong>" . e($u['name']) . "</strong> cannot be permanently deleted because they have associated institutional research or review records on file. The account has been deactivated instead.");
-                } else {
-                    try {
-                        $db->beginTransaction();
-                        // Clean up secondary non-critical references for this user if any exist
-                        $db->prepare("DELETE FROM proposal_co_pis WHERE email = (SELECT email FROM users WHERE id = ?)")->execute([$userId]);
-                        $db->prepare("DELETE FROM proposal_comments WHERE user_id = ?")->execute([$userId]);
-                        $db->prepare("DELETE FROM progress_report_comments WHERE user_id = ?")->execute([$userId]);
-                        $db->prepare("DELETE FROM irc_decisions WHERE decided_by = ?")->execute([$userId]);
-                        $db->prepare("DELETE FROM audit_logs WHERE user_id = ?")->execute([$userId]);
-
-                        $stmt = $db->prepare("DELETE FROM users WHERE id = ?");
-                        $stmt->execute([$userId]);
-                        $db->commit();
-
-                        log_audit($currentUserId, 'USER_DELETED', 'users', $userId, "Deleted user {$u['name']} (ID: {$userId})");
-                        flash('success', "User <strong>" . e($u['name']) . "</strong> has been permanently removed.");
-                    } catch (Exception $eDel) {
-                        if ($db->inTransaction()) {
-                            $db->rollBack();
-                        }
-                        error_log("Failed deleting user {$userId}: " . $eDel->getMessage());
-                        // If foreign key constraint still blocks hard deletion, gracefully deactivate
-                        $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ?")->execute([$userId]);
-                        log_audit($currentUserId, 'USER_DEACTIVATED_INSTEAD_OF_DELETE', 'users', $userId, "User {$u['name']} deactivated instead of delete due to: " . $eDel->getMessage());
-                        flash('warning', "User <strong>" . e($u['name']) . "</strong> has historical institutional records, so the account has been deactivated instead.");
+                    // Clean references so foreign key constraints allow permanent deletion:
+                    if (!empty($uEmail)) {
+                        $db->prepare("DELETE FROM proposal_co_pis WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))")->execute([$uEmail]);
                     }
+                    $db->prepare("DELETE FROM proposal_comments WHERE user_id = ?")->execute([$userId]);
+                    $db->prepare("DELETE FROM progress_report_comments WHERE user_id = ?")->execute([$userId]);
+                    $db->prepare("DELETE FROM irc_decisions WHERE decided_by = ?")->execute([$userId]);
+                    $db->prepare("DELETE FROM audit_logs WHERE user_id = ?")->execute([$userId]);
+                    $db->prepare("DELETE FROM proposal_documents WHERE uploaded_by = ?")->execute([$userId]);
+                    $db->prepare("DELETE FROM proposal_status_history WHERE action_by = ?")->execute([$userId]);
+                    $db->prepare("UPDATE irc_meetings SET created_by = ? WHERE created_by = ?")->execute([$currentUserId, $userId]);
+
+                    // Clean proposals submitted by this user
+                    $stmtProps = $db->prepare("SELECT id FROM proposals WHERE scientist_id = ?");
+                    $stmtProps->execute([$userId]);
+                    $propIds = $stmtProps->fetchAll(PDO::FETCH_COLUMN);
+                    foreach ($propIds as $pId) {
+                        $pId = (int)$pId;
+                        $db->prepare("DELETE FROM proposal_documents WHERE proposal_id = ?")->execute([$pId]);
+                        $db->prepare("DELETE FROM proposal_comments WHERE proposal_id = ?")->execute([$pId]);
+                        $db->prepare("DELETE FROM proposal_co_pis WHERE proposal_id = ?")->execute([$pId]);
+                        $db->prepare("DELETE FROM proposal_status_history WHERE proposal_id = ?")->execute([$pId]);
+                        $db->prepare("DELETE FROM irc_decisions WHERE proposal_id = ?")->execute([$pId]);
+                        $db->prepare("DELETE FROM proposals WHERE id = ?")->execute([$pId]);
+                    }
+
+                    // Clean projects submitted by this user
+                    $stmtPrjs = $db->prepare("SELECT id FROM projects WHERE scientist_id = ?");
+                    $stmtPrjs->execute([$userId]);
+                    $prjIds = $stmtPrjs->fetchAll(PDO::FETCH_COLUMN);
+                    foreach ($prjIds as $pjId) {
+                        $pjId = (int)$pjId;
+                        $db->prepare("DELETE FROM progress_reports WHERE project_id = ?")->execute([$pjId]);
+                        $db->prepare("DELETE FROM project_completion_reports WHERE project_id = ?")->execute([$pjId]);
+                        $db->prepare("DELETE FROM projects WHERE id = ?")->execute([$pjId]);
+                    }
+
+                    // Progress reports or completion reports submitted by user
+                    $db->prepare("DELETE FROM progress_reports WHERE submitted_by = ?")->execute([$userId]);
+                    $db->prepare("DELETE FROM project_completion_reports WHERE submitted_by = ?")->execute([$userId]);
+
+                    // Now hard-delete the user record
+                    $delStmt = $db->prepare("DELETE FROM users WHERE id = ?");
+                    $delStmt->execute([$userId]);
+                    $db->commit();
+
+                    log_audit($currentUserId, 'USER_DELETED', 'users', $userId, "Deleted user {$u['name']} (ID: {$userId})");
+                    flash('success', "User '{$u['name']}' has been permanently removed.");
+                } catch (Exception $eDel) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    error_log("Failed deleting user {$userId}: " . $eDel->getMessage());
+                    // Fallback: if hard delete was blocked by a complex constraint, deactivate gracefully
+                    $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ?")->execute([$userId]);
+                    log_audit($currentUserId, 'USER_DEACTIVATED_INSTEAD_OF_DELETE', 'users', $userId, "User {$u['name']} deactivated instead of delete: " . $eDel->getMessage());
+                    flash('warning', "User '{$u['name']}' has linked institutional archive records, so the account has been deactivated instead.");
                 }
+            } else {
+                flash('warning', "User could not be found or was already removed.");
             }
         }
         redirect('/joint-director/users.php');
@@ -285,7 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $roleName = get_role_name_by_id($roleId);
                 log_audit($currentUserId, 'USER_REGISTRATION_APPROVED', 'users', $userId, "Joint Director approved registration for {$userToApprove['name']} ({$userToApprove['email']}) as {$roleName}");
 
-                flash('success', "Registration for <strong>" . e($userToApprove['name']) . "</strong> has been <strong>Approved and Activated</strong> as <strong>" . e($roleName) . "</strong>. They can now log in immediately.");
+                flash('success', "Registration for {$userToApprove['name']} has been approved and activated as {$roleName}. They can now log in immediately.");
             }
         }
         redirect('/joint-director/users.php');
@@ -308,7 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$userId]);
 
                 log_audit($currentUserId, 'USER_REGISTRATION_REJECTED', 'users', $userId, "Joint Director declined registration for {$target['name']} ({$target['email']}). " . (!empty($reason) ? "Reason: {$reason}" : ""));
-                flash('info', "Registration request for <strong>" . e($target['name']) . "</strong> has been declined.");
+                flash('info', "Registration request for {$target['name']} has been declined.");
             }
         }
         redirect('/joint-director/users.php');
@@ -322,7 +336,7 @@ $deptFilter = (int)($_GET['dept'] ?? 0);
 $statusFilter = sanitize($_GET['status'] ?? '');
 
 $sql = "SELECT u.*, r.role_name, d.department_name, d.department_code,
-               (SELECT COUNT(*) FROM proposals WHERE scientist_id = u.id) as proposals_count,
+               (SELECT COUNT(*) FROM proposals WHERE scientist_id = u.id AND LOWER(TRIM(current_status)) != 'draft') as proposals_count,
                (SELECT COUNT(*) FROM projects WHERE scientist_id = u.id) as projects_count
         FROM users u
         JOIN roles r ON u.role_id = r.id
@@ -524,7 +538,7 @@ include __DIR__ . '/../includes/header.php';
                         </td>
                         <td>
                             <span class="small text-muted" title="<?= e($pu['created_at']) ?>">
-                                <?= date('d M Y, h:i A', strtotime($pu['created_at'])) ?>
+                                <?= format_datetime($pu['created_at']) ?>
                             </span>
                         </td>
                         <td class="text-end">
@@ -559,8 +573,18 @@ include __DIR__ . '/../includes/header.php';
                                     <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
                                     <input type="hidden" name="action" value="reject_user">
                                     <input type="hidden" name="user_id" value="<?= $pu['id'] ?>">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Decline Registration">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Decline Registration">
                                         <i class="bi bi-x-circle"></i> Decline
+                                    </button>
+                                </form>
+
+                                <!-- Delete Permanently -->
+                                <form method="POST" action="<?= url("/joint-director/users.php") ?>" class="d-inline" onsubmit="return confirm('Permanently remove applicant <?= e(addslashes($pu['name'])) ?>?');">
+                                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                                    <input type="hidden" name="action" value="delete_user">
+                                    <input type="hidden" name="user_id" value="<?= $pu['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Permanently Delete Registration">
+                                        <i class="bi bi-trash"></i>
                                     </button>
                                 </form>
                             </div>

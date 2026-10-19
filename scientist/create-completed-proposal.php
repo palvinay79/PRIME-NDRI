@@ -256,7 +256,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Validation
     if ($submissionAction === 'submit') {
-        if (!$dbProj && (empty($projectType) || !in_array($projectType, ['in_house', 'funding_agency']))) {
+        if ($dbProj && (int)$dbProj['scientist_id'] !== $userId && !$isHod) {
+            $error = "Access Restricted: You are assigned as a Co-PI on this project (View Only). Only the Principal Investigator (Lead PI) can submit project completion reports.";
+        } elseif (!$dbProj && (empty($projectType) || !in_array($projectType, ['in_house', 'funding_agency']))) {
             $error = "Please select whether this is an In-house Project or Externally Funded Project.";
         } elseif (!$dbProj && $projectType === 'funding_agency' && empty($fundingAgency)) {
             $error = "Funding Agency Name is mandatory for Externally Funded Projects.";
@@ -509,6 +511,7 @@ include __DIR__ . '/../includes/header.php';
 
 <form method="POST" action="<?= url("/scientist/create-completed-proposal.php") ?>" enctype="multipart/form-data" id="completed-proposal-form">
     <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+    <input type="hidden" name="submit_action" id="submit_action_hidden" value="draft">
 
     <!-- Section 1: Project Identification & Selection -->
     <div class="detail-section-card">
@@ -1105,12 +1108,21 @@ include __DIR__ . '/../includes/header.php';
         <div class="card-body d-flex justify-content-between align-items-center">
             <a href="<?= $isHod ? url("/hod/dashboard.php") : url("/scientist/proposals.php") ?>" class="btn btn-outline-secondary">Cancel</a>
             <div class="d-flex gap-2">
-                <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="window.isDraftAction = true;">
-                    <i class="bi bi-save me-1"></i> Save as Draft
-                </button>
-                <button type="submit" name="submit_action" value="submit" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" id="submit_hod_btn" onclick="window.isDraftAction = false;">
-                    <i class="bi bi-send-check me-1"></i> <?= $isHod ? 'Submit to Joint Director' : 'Submit to HOD' ?>
-                </button>
+                <?php if ($selectedProject && (int)$selectedProject['scientist_id'] !== $userId && !$isHod): ?>
+                    <span class="badge bg-secondary-subtle text-secondary border px-3 py-2 font-monospace">
+                        <i class="bi bi-lock me-1"></i> Co-PI View-Only Mode
+                    </span>
+                    <a href="<?= url("/scientist/view-progress.php?project_id=" . $selectedProject['id']) ?>" class="btn btn-primary px-3" style="background-color: #1a365d; border-color: #1a365d;">
+                        <i class="bi bi-eye me-1"></i> View Reports & Observations
+                    </a>
+                <?php else: ?>
+                    <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="const el = document.getElementById('submit_action_hidden'); if(el) el.value = 'draft'; window.isDraftAction = true;">
+                        <i class="bi bi-save me-1"></i> Save as Draft
+                    </button>
+                    <button type="submit" name="submit_action" value="submit" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" id="submit_hod_btn" onclick="const el = document.getElementById('submit_action_hidden'); if(el) el.value = 'submit'; window.isDraftAction = false;">
+                        <i class="bi bi-send-check me-1"></i> <?= $isHod ? 'Submit to Joint Director' : 'Submit to HOD' ?>
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -1652,6 +1664,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const submitBtn = e.submitter || document.activeElement;
             const isDraft = window.isDraftAction || (submitBtn && (submitBtn.value === 'draft' || submitBtn.getAttribute('value') === 'draft'));
             if (isDraft) {
+                const draftActionInput = document.getElementById('submit_action_hidden');
+                if (draftActionInput) draftActionInput.value = 'draft';
                 form.querySelectorAll('[required]').forEach(el => el.removeAttribute('required'));
                 return true;
             }

@@ -45,9 +45,9 @@ if ((int)$proposal['department_id'] !== (int)$user['department_id']) {
 }
 
 // Check if proposal is eligible for HOD review
-if (!can_hod_review_proposal($proposal)) {
-    flash('warning', "Proposal {$proposal['proposal_number']} is currently in status '{$proposal['current_status']}' and is not awaiting HOD review.");
-    header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
+if (strtolower(trim($proposal['current_status'] ?? '')) === 'draft' || !can_hod_review_proposal($proposal)) {
+    flash('warning', "Proposal {$proposal['proposal_number']} is in status '{$proposal['current_status']}' and is not awaiting HOD review.");
+    header("Location: " . url("/hod/proposals.php"));
     exit;
 }
 

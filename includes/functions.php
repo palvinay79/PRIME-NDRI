@@ -217,15 +217,16 @@ function render_flashes(): string {
     $html = '<div class="flashes-container mb-3">';
     foreach ($flashes as $f) {
         $type = htmlspecialchars($f['type'] ?? 'info', ENT_QUOTES, 'UTF-8');
-        $rawMsg = $f['message'] ?? '';
+        $rawMsg = (string)($f['message'] ?? '');
 
-        // If string contains escaped &lt;strong&gt; or &lt;b&gt;, decode them safely
-        if (str_contains($rawMsg, '&lt;strong&gt;') || str_contains($rawMsg, '&lt;/strong&gt;') || str_contains($rawMsg, '&lt;b&gt;') || str_contains($rawMsg, '&lt;/b&gt;')) {
+        // Decode any pre-escaped tags so we can strip them cleanly
+        if (str_contains($rawMsg, '&lt;') && str_contains($rawMsg, '&gt;')) {
             $rawMsg = htmlspecialchars_decode($rawMsg, ENT_QUOTES);
         }
 
-        // Only allow safe inline formatting tags, strip any scripts or dangerous markup
-        $safeMsg = strip_tags($rawMsg, '<strong><b><em><i><br><span><code><small>');
+        // Clean out any raw HTML tags (like <strong>) so they never render as literal text
+        $cleanMsg = strip_tags($rawMsg);
+        $safeMsg = htmlspecialchars($cleanMsg, ENT_QUOTES, 'UTF-8');
 
         $html .= "<div class=\"alert alert-{$type} alert-dismissible fade show shadow-sm\" role=\"alert\">
             {$safeMsg}
@@ -245,23 +246,27 @@ function format_currency(?float $amount): string {
 }
 
 /**
- * Format Date (e.g. 24-Oct-2026)
+ * Format Date (Strictly dd -mm -yy format, e.g. 24 -10 -26)
  */
-function format_date(?string $dateStr): string {
+function format_date(?string $dateStr, ?string $format = null): string {
     if (empty($dateStr)) return '-';
     $timestamp = strtotime($dateStr);
     if (!$timestamp) return '-';
-    return date('d M Y', $timestamp);
+    // If a custom non-standard format was passed that is not a legacy full date, allow it, else use dd -mm -yy
+    if ($format !== null && !in_array($format, ['d M Y', 'd-m-Y', 'Y-m-d', 'd M Y, h:i A'])) {
+        return date($format, $timestamp);
+    }
+    return date('d -m -y', $timestamp);
 }
 
 /**
- * Format DateTime (e.g. 24-Oct-2026 14:30)
+ * Format DateTime (Strictly dd -mm -yy with time, e.g. 24 -10 -26, 02:30 PM)
  */
 function format_datetime(?string $dateStr): string {
     if (empty($dateStr)) return '-';
     $timestamp = strtotime($dateStr);
     if (!$timestamp) return '-';
-    return date('d M Y, h:i A', $timestamp);
+    return date('d -m -y, h:i A', $timestamp);
 }
 
 /**
@@ -555,6 +560,44 @@ function get_project_copis(int $projectId): array {
 }
 
 /**
+ * Check if a specific user is a Co-PI on a given proposal
+ */
+function is_user_proposal_copi(int $proposalId, ?int $userId = null): bool {
+    $userId = $userId ?? current_user_id();
+    if (!$userId || $proposalId <= 0) return false;
+    $db = get_db();
+    $stmtU = $db->prepare("SELECT name, email FROM users WHERE id = ?");
+    $stmtU->execute([$userId]);
+    $u = $stmtU->fetch();
+    if (!$u) return false;
+    $uEmail = trim($u['email'] ?? '');
+    $uName = trim($u['name'] ?? '');
+    
+    $stmt = $db->prepare("SELECT 1 FROM proposal_co_pis WHERE proposal_id = ? AND (
+        (email IS NOT NULL AND TRIM(email) != '' AND LOWER(TRIM(email)) = LOWER(TRIM(?)))
+        OR (LOWER(TRIM(co_pi_name)) = LOWER(TRIM(?)))
+    ) LIMIT 1");
+    $stmt->execute([$proposalId, $uEmail, $uName]);
+    return (bool)$stmt->fetchColumn();
+}
+
+/**
+ * Check if a specific user is a Co-PI on a given project
+ */
+function is_user_project_copi(int $projectId, ?int $userId = null): bool {
+    $userId = $userId ?? current_user_id();
+    if (!$userId || $projectId <= 0) return false;
+    $db = get_db();
+    $stmtP = $db->prepare("SELECT proposal_id FROM projects WHERE id = ?");
+    $stmtP->execute([$projectId]);
+    $propId = (int)$stmtP->fetchColumn();
+    if ($propId > 0) {
+        return is_user_proposal_copi($propId, $userId);
+    }
+    return false;
+}
+
+/**
  * Retrieve the HOD who reviewed/endorsed/approved a proposal to the Joint Director.
  * Returns associative array with name, designation, department_name, approved_at, and comments.
  */
@@ -672,6 +715,14 @@ function parse_yearly_budget($rawBudget, float $fallbackTotal = 0, int $fallback
  * Render an HTML view of the year-wise budget breakdown.
  */
 function render_yearly_budget_html($yearlyBudget, float $totalBudget = 0, bool $compact = false): string {
+    $hasExplicitYearly = !empty($yearlyBudget) && !(is_string($yearlyBudget) && in_array(trim($yearlyBudget), ['', '[]', '{}', 'null']));
+    if (!$hasExplicitYearly && $totalBudget > 0) {
+        if ($compact) {
+            return '<span class="badge bg-success-subtle text-success border border-success-subtle extra-small px-2 py-1"><i class="bi bi-bank2 me-1"></i><strong>Grant:</strong> ' . format_currency($totalBudget) . ' (Single Allocation)</span>';
+        }
+        return '<div class="p-2 rounded bg-light border border-success-subtle d-flex flex-wrap align-items-center justify-content-between mt-1 gap-2"><span class="text-secondary small"><i class="bi bi-bank2 text-success me-1"></i><strong>External Project Grant:</strong></span><span class="fw-bold font-monospace text-primary fs-6">' . format_currency($totalBudget) . '</span><span class="badge bg-success-subtle text-success border border-success-subtle extra-small">Single Grant Allocation</span></div>';
+    }
+
     $parsed = parse_yearly_budget($yearlyBudget, $totalBudget);
     $computedTotal = array_sum($parsed);
     if ($computedTotal <= 0 && $totalBudget > 0) {

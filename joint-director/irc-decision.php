@@ -79,9 +79,9 @@ if (isset($_GET['check_unique'])) {
     exit;
 }
 
-if (!can_record_irc_decision($proposal)) {
+if (strtolower(trim($proposal['current_status'] ?? '')) === 'draft' || !can_record_irc_decision($proposal)) {
     flash('warning', "Proposal {$proposal['proposal_number']} is in status '{$proposal['current_status']}' and not currently awaiting IRC council decision.");
-    header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
+    header("Location: " . url("/joint-director/proposals.php"));
     exit;
 }
 

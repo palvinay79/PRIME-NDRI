@@ -16,6 +16,9 @@ $isHod = (current_user_role_id() === ROLE_HOD);
 $pageTitle = $isHod ? 'My Research Projects' : 'My Research Projects';
 $db = get_db();
 
+$userEmail = trim($currentUser['email'] ?? '');
+$userName = trim($currentUser['name'] ?? '');
+
 if ($isHod) {
     $stmt = $db->prepare("SELECT pr.*, p.title as proposal_title, p.institute_priority_area, p.proposed_budget,
                                  p.project_type as prop_project_type, p.funding_agency as prop_funding_agency,
@@ -31,9 +34,13 @@ if ($isHod) {
                           FROM projects pr
                           JOIN proposals p ON pr.proposal_id = p.id
                           JOIN departments d ON COALESCE(pr.department_id, p.department_id) = d.id
-                          WHERE (pr.scientist_id = ? OR pr.department_id = ?)
+                          WHERE (pr.scientist_id = ? OR pr.department_id = ? OR pr.proposal_id IN (
+                              SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+                              WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+                                 OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+                          ))
                           ORDER BY pr.created_at DESC");
-    $stmt->execute([$userId, (int)($currentUser['department_id'] ?? 1)]);
+    $stmt->execute([$userId, (int)($currentUser['department_id'] ?? 1), $userEmail, $userName]);
 } else {
     $stmt = $db->prepare("SELECT pr.*, p.title as proposal_title, p.institute_priority_area, p.proposed_budget,
                                  p.project_type as prop_project_type, p.funding_agency as prop_funding_agency,
@@ -49,9 +56,13 @@ if ($isHod) {
                           FROM projects pr
                           JOIN proposals p ON pr.proposal_id = p.id
                           JOIN departments d ON COALESCE(pr.department_id, p.department_id) = d.id
-                          WHERE pr.scientist_id = ?
+                          WHERE (pr.scientist_id = ? OR pr.proposal_id IN (
+                              SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+                              WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+                                 OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+                          ))
                           ORDER BY pr.created_at DESC");
-    $stmt->execute([$userId]);
+    $stmt->execute([$userId, $userEmail, $userName]);
 }
 $projects = $stmt->fetchAll();
 
@@ -173,17 +184,41 @@ include __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </div>
 
+                        <?php 
+                        $isLeadPi = ((int)$prj['scientist_id'] === $userId);
+                        $isHodOfDept = ($isHod && (int)$prj['department_id'] === (int)($currentUser['department_id'] ?? 0));
+                        $canSubmitReport = ($isLeadPi || $isHodOfDept);
+                        ?>
                         <div class="d-flex flex-wrap gap-2 pt-2 border-top">
-                            <a href="<?= url("/scientist/ongoing-projects.php?project_id=" . ($prj['id']) . "") ?>" class="btn btn-sm btn-primary" style="background-color: #1a365d; border-color: #1a365d;">
-                                <i class="bi bi-arrow-repeat me-1"></i> Submit Progress Report
-                            </a>
-                            <a href="<?= url("/scientist/view-progress.php?project_id=" . ($prj['id']) . "") ?>" class="btn btn-sm btn-outline-secondary">
-                                <i class="bi bi-list-check me-1"></i> View Reports (<?= (int)$prj['reports_count'] ?>)
-                            </a>
-                            <?php if ($prj['project_status'] === PROJECT_STATUS_ACTIVE): ?>
-                                <a href="<?= url("/scientist/create-completed-proposal.php?project_id=" . ($prj['id']) . "") ?>" class="btn btn-sm btn-outline-dark">
-                                    <i class="bi bi-check2-circle me-1"></i> Completion Report
+                            <?php if ($canSubmitReport): ?>
+                                <a href="<?= url("/scientist/ongoing-projects.php?project_id=" . ($prj['id'])) ?>" class="btn btn-sm btn-primary" style="background-color: #1a365d; border-color: #1a365d;">
+                                    <i class="bi bi-arrow-repeat me-1"></i> Submit Progress Report
                                 </a>
+                                <a href="<?= url("/scientist/view-progress.php?project_id=" . ($prj['id'])) ?>" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-list-check me-1"></i> View Reports (<?= (int)$prj['reports_count'] ?>)
+                                </a>
+                                <?php if ($prj['project_status'] === PROJECT_STATUS_ACTIVE): ?>
+                                    <a href="<?= url("/scientist/create-completed-proposal.php?project_id=" . ($prj['id'])) ?>" class="btn btn-sm btn-outline-dark">
+                                        <i class="bi bi-check2-circle me-1"></i> Completion Report
+                                    </a>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <div class="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
+                                    <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 font-monospace">
+                                        <i class="bi bi-eye me-1"></i> Co-PI (View Only)
+                                    </span>
+                                    <div class="d-flex gap-2">
+                                        <a href="<?= url("/scientist/view-progress.php?project_id=" . ($prj['id'])) ?>" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-list-check me-1"></i> View Reports (<?= (int)$prj['reports_count'] ?>)
+                                        </a>
+                                        <a href="<?= url("/scientist/proposal-details.php?id=" . ($prj['proposal_id'])) ?>" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-file-earmark-text me-1"></i> View Proposal
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="extra-small text-muted w-100 mt-1">
+                                    <i class="bi bi-info-circle me-1"></i> You are assigned as a Co-PI (Viewer). Progress reports can only be submitted by the Lead PI.
+                                </div>
                             <?php endif; ?>
                         </div>
                     </div>

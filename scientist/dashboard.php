@@ -11,7 +11,10 @@ require_once __DIR__ . '/../includes/functions.php';
 require_role(ROLE_SCIENTIST);
 
 $pageTitle = 'Scientist Dashboard';
+$currentUser = current_user();
 $userId = current_user_id();
+$userEmail = trim($currentUser['email'] ?? '');
+$userName = trim($currentUser['name'] ?? '');
 $db = get_db();
 
 // Metrics
@@ -24,9 +27,21 @@ $metrics = [
     'completed_projects' => 0
 ];
 
-// Count proposals by status
-$stmt = $db->prepare("SELECT current_status, COUNT(*) as cnt FROM proposals WHERE scientist_id = ? GROUP BY current_status");
-$stmt->execute([$userId]);
+// Count proposals by status (including Co-PI submissions)
+$stmt = $db->prepare("
+    SELECT p.current_status, COUNT(DISTINCT p.id) as cnt 
+    FROM proposals p 
+    WHERE (
+        p.scientist_id = ? OR 
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
+    )
+    GROUP BY p.current_status
+");
+$stmt->execute([$userId, $userEmail, $userName]);
 $statusCounts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
 $metrics['total'] = array_sum($statusCounts);
@@ -37,24 +52,66 @@ $metrics['pending'] = ($statusCounts[STATUS_SUBMITTED_HOD] ?? 0) +
                       ($statusCounts[STATUS_APPROVED_IRC] ?? 0) +
                       ($statusCounts[STATUS_PENDING_IRC] ?? 0);
 
-// Projects count
-$stmt = $db->prepare("SELECT project_status, COUNT(*) as cnt FROM projects WHERE scientist_id = ? GROUP BY project_status");
-$stmt->execute([$userId]);
+// Projects count (Approved projects where user is Lead PI or Co-PI)
+$stmt = $db->prepare("
+    SELECT pr.project_status, COUNT(DISTINCT pr.id) as cnt 
+    FROM projects pr 
+    WHERE (
+        pr.scientist_id = ? OR 
+        pr.proposal_id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        )
+    )
+    GROUP BY pr.project_status
+");
+$stmt->execute([$userId, $userEmail, $userName]);
 $projCounts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 $metrics['active_projects'] = $projCounts[PROJECT_STATUS_ACTIVE] ?? 0;
 $metrics['completed_projects'] = $projCounts[PROJECT_STATUS_COMPLETED] ?? 0;
 
 // Proposal category counts
-$stmt = $db->prepare("SELECT COUNT(*) FROM proposals WHERE scientist_id = ? AND (proposal_category = 'new' OR proposal_category IS NULL)");
-$stmt->execute([$userId]);
+$stmt = $db->prepare("
+    SELECT COUNT(DISTINCT p.id) FROM proposals p 
+    WHERE (
+        p.scientist_id = ? OR 
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
+    ) AND (p.proposal_category = 'new' OR p.proposal_category IS NULL)
+");
+$stmt->execute([$userId, $userEmail, $userName]);
 $countNew = (int)$stmt->fetchColumn();
 
-$stmt = $db->prepare("SELECT COUNT(*) FROM proposals WHERE scientist_id = ? AND proposal_category = 'ongoing'");
-$stmt->execute([$userId]);
+$stmt = $db->prepare("
+    SELECT COUNT(DISTINCT p.id) FROM proposals p 
+    WHERE (
+        p.scientist_id = ? OR 
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
+    ) AND p.proposal_category = 'ongoing'
+");
+$stmt->execute([$userId, $userEmail, $userName]);
 $countOngoing = (int)$stmt->fetchColumn();
 
-$stmt = $db->prepare("SELECT COUNT(*) FROM proposals WHERE scientist_id = ? AND proposal_category = 'completed'");
-$stmt->execute([$userId]);
+$stmt = $db->prepare("
+    SELECT COUNT(DISTINCT p.id) FROM proposals p 
+    WHERE (
+        p.scientist_id = ? OR 
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
+    ) AND p.proposal_category = 'completed'
+");
+$stmt->execute([$userId, $userEmail, $userName]);
 $countCompleted = (int)$stmt->fetchColumn();
 
 // Active tab for proposal filtering
@@ -63,12 +120,19 @@ if (!in_array($activeTab, ['all', 'new', 'ongoing', 'completed'])) {
     $activeTab = 'all';
 }
 
-// Recent proposals filtered by active tab
+// Recent proposals filtered by active tab (Lead PI or Co-PI)
 $recentSql = "SELECT p.*, d.department_code, d.department_name
               FROM proposals p
               LEFT JOIN departments d ON p.department_id = d.id
-              WHERE p.scientist_id = ?";
-$recentParams = [$userId];
+              WHERE (
+                  p.scientist_id = ? OR 
+                  (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+                      SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+                      WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+                         OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+                  ))
+              )";
+$recentParams = [$userId, $userEmail, $userName];
 
 if ($activeTab === 'new') {
     $recentSql .= " AND (p.proposal_category = 'new' OR p.proposal_category IS NULL)";
@@ -83,7 +147,7 @@ $stmt = $db->prepare($recentSql);
 $stmt->execute($recentParams);
 $recentProposals = $stmt->fetchAll();
 
-// Active Projects with feedback indicators
+// Active Projects with feedback indicators (Lead PI or Co-PI)
 $stmt = $db->prepare("SELECT pr.*, p.title as proposal_title,
                       (SELECT COUNT(*) FROM progress_reports WHERE project_id = pr.id) as reports_count,
                       (SELECT COALESCE(SUM(COALESCE(budget_utilized, budget_utilization, 0)), 0) FROM progress_reports WHERE project_id = pr.id) as total_expenditure,
@@ -93,9 +157,16 @@ $stmt = $db->prepare("SELECT pr.*, p.title as proposal_title,
                       (SELECT review_status FROM progress_reports WHERE project_id = pr.id AND (reviewer_comments IS NOT NULL AND TRIM(reviewer_comments) != '') ORDER BY COALESCE(reviewed_at, updated_at, id) DESC LIMIT 1) as latest_review_status
                       FROM projects pr
                       JOIN proposals p ON pr.proposal_id = p.id
-                      WHERE pr.scientist_id = ? AND pr.project_status = 'Active'
+                      WHERE (
+                          pr.scientist_id = ? OR 
+                          pr.proposal_id IN (
+                              SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+                              WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+                                 OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+                          )
+                      ) AND pr.project_status = 'Active'
                       ORDER BY pr.created_at DESC");
-$stmt->execute([$userId]);
+$stmt->execute([$userId, $userEmail, $userName]);
 $activeProjects = $stmt->fetchAll();
 
 // Handle acknowledging/dismissing feedback alert
@@ -402,10 +473,10 @@ include __DIR__ . '/../includes/header.php';
                                     </td>
                                     <td class="text-end">
                                         <div class="btn-group btn-group-sm">
-                                            <a href="<?= url("/scientist/proposal-details.php?id=" . ($prop['id']) . "") ?>" class="btn btn-outline-secondary" title="View Details">
+                                            <a href="<?= url("/scientist/proposal-details.php?id=" . ($prop['id'])) ?>" class="btn btn-outline-secondary" title="View Details">
                                                 <i class="bi bi-eye"></i>
                                             </a>
-                                            <?php if (in_array($prop['current_status'], [STATUS_DRAFT, STATUS_RETURNED_HOD, STATUS_RETURNED_JD])): 
+                                            <?php if ((int)$prop['scientist_id'] === $userId && in_array($prop['current_status'], [STATUS_DRAFT, STATUS_RETURNED_HOD, STATUS_RETURNED_JD])): 
                                                 $editUrl = url("/scientist/edit-proposal.php?id=" . $prop['id']);
                                                 if (($prop['proposal_category'] ?? '') === 'ongoing') {
                                                     $editUrl = url("/scientist/ongoing-projects.php?id=" . $prop['id']);
@@ -417,7 +488,7 @@ include __DIR__ . '/../includes/header.php';
                                                     <i class="bi bi-pencil-square"></i>
                                                 </a>
                                             <?php endif; ?>
-                                            <a href="<?= url("/export-doc.php?id=" . ($prop['id']) . "") ?>" class="btn btn-outline-secondary" title="Download Word Export (.docx)">
+                                            <a href="<?= url("/export-doc.php?id=" . ($prop['id'])) ?>" class="btn btn-outline-secondary" title="Download Word Export (.docx)">
                                                 <i class="bi bi-file-earmark-word"></i>
                                             </a>
                                         </div>
@@ -443,11 +514,21 @@ include __DIR__ . '/../includes/header.php';
                     <p class="text-muted small mb-0 text-center py-3">No active approved projects currently running.</p>
                 <?php else: ?>
                     <?php foreach ($activeProjects as $proj): ?>
+                        <?php 
+                        $isLeadPi = ((int)$proj['scientist_id'] === $userId);
+                        ?>
                         <div class="border rounded p-3 mb-3 bg-light-subtle">
-                            <div class="d-flex justify-content-between align-items-start mb-1">
-                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace small">
-                                    <?= e($proj['project_number']) ?>
-                                </span>
+                            <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-1">
+                                <div class="d-flex align-items-center gap-1">
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace small">
+                                        <?= e($proj['project_number']) ?>
+                                    </span>
+                                    <?php if ($isLeadPi): ?>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle extra-small">Lead PI</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle extra-small"><i class="bi bi-eye me-1"></i>Co-PI (Viewer)</span>
+                                    <?php endif; ?>
+                                </div>
                                 <small class="text-muted"><?= format_date($proj['start_date']) ?> to <?= format_date($proj['end_date']) ?></small>
                             </div>
                             <h6 class="fw-bold mb-2 text-dark">
@@ -481,12 +562,18 @@ include __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
 
                             <div class="d-flex gap-2">
-                                <a href="<?= url("/scientist/view-progress.php?project_id=" . ($proj['id']) . "") ?>" class="btn btn-sm btn-outline-success w-100">
+                                <a href="<?= url("/scientist/view-progress.php?project_id=" . ($proj['id'])) ?>" class="btn btn-sm btn-outline-success w-100">
                                     <i class="bi bi-list-check me-1"></i> Reports (<?= (int)($proj['reports_count'] ?? 0) ?>)
                                 </a>
-                                <a href="<?= url("/scientist/ongoing-projects.php?project_id=" . ($proj['id']) . "") ?>" class="btn btn-sm btn-outline-primary w-100">
-                                    <i class="bi bi-arrow-repeat me-1"></i> Progress Report
-                                </a>
+                                <?php if ($isLeadPi): ?>
+                                    <a href="<?= url("/scientist/ongoing-projects.php?project_id=" . ($proj['id'])) ?>" class="btn btn-sm btn-outline-primary w-100">
+                                        <i class="bi bi-arrow-repeat me-1"></i> Progress Report
+                                    </a>
+                                <?php else: ?>
+                                    <a href="<?= url("/scientist/proposal-details.php?id=" . ($proj['proposal_id'])) ?>" class="btn btn-sm btn-outline-secondary w-100" title="Viewer Only">
+                                        <i class="bi bi-file-earmark-text me-1"></i> Proposal
+                                    </a>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endforeach; ?>

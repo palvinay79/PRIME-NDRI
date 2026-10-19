@@ -44,11 +44,13 @@ if (!$project) {
     exit;
 }
 
-// Access check: scientist can view own; HOD can view department; JD can view all
+// Access check: scientist can view if Lead PI or Co-PI; HOD can view department; JD can view all
 if ($userRole === ROLE_SCIENTIST && (int)$project['scientist_id'] !== $userId) {
-    http_response_code(403);
-    include __DIR__ . '/../includes/403.php';
-    exit;
+    if (!is_user_project_copi($projectId, $userId)) {
+        http_response_code(403);
+        include __DIR__ . '/../includes/403.php';
+        exit;
+    }
 }
 if ($userRole === ROLE_HOD && (int)$project['department_id'] !== (int)current_user_department_id()) {
     http_response_code(403);
@@ -61,8 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
     $action = $_POST['action'] ?? '';
 
-    // 1. Quick Budget Correction (Scientist / JD)
+    // 1. Quick Budget Correction (Scientist Lead PI / JD)
     if ($action === 'quick_fix_budget') {
+        if ((int)$project['scientist_id'] !== $userId && $userRole !== ROLE_JOINT_DIRECTOR) {
+            flash('danger', 'Unauthorized: Only the Principal Investigator (Lead PI) or Joint Director can adjust budget figures.');
+            header("Location: " . url("/scientist/view-progress.php?project_id=" . $projectId));
+            exit;
+        }
         $reportId = (int)($_POST['report_id'] ?? 0);
         $newBudget = (float)($_POST['corrected_budget'] ?? 0);
 

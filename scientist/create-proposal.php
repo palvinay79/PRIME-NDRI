@@ -77,36 +77,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $objectives = sanitize_html($_POST['objectives'] ?? '');
     $methodology = null; // Methodology field removed as per requirements
     $expectedOutcomes = sanitize($_POST['expected_outcomes'] ?? '');
+    $startDate = !empty($_POST['proposed_start_date']) ? $_POST['proposed_start_date'] : null;
+    $endDate = !empty($_POST['proposed_end_date']) ? $_POST['proposed_end_date'] : null;
     $budget = (float)($_POST['proposed_budget'] ?? 0);
+    $singleBudget = (float)($_POST['proposed_budget_single'] ?? 0);
 
-    // Process Year-wise Budget Allocation
-    $yearlyAmounts = $_POST['yearly_budget_amount'] ?? [];
-    $yearlyLabels = $_POST['yearly_budget_year'] ?? [];
-    $yearlyBudgetMap = [];
-    $sumYearly = 0.0;
-    if (!empty($yearlyAmounts) && is_array($yearlyAmounts)) {
-        for ($yi = 0; $yi < count($yearlyAmounts); $yi++) {
-            $amt = (float)($yearlyAmounts[$yi] ?? 0);
-            $lbl = trim(sanitize($yearlyLabels[$yi] ?? ''));
-            if (empty($lbl)) {
-                $lbl = 'Year ' . ($yi + 1);
+    // Calculate project tenure in whole budget years (any fractional months/days round up to next year)
+    $tenureYears = 1;
+    if (!empty($startDate) && !empty($endDate)) {
+        try {
+            $d1 = new DateTime($startDate);
+            $d2 = new DateTime($endDate);
+            if ($d2 > $d1) {
+                $diff = $d1->diff($d2);
+                $tenureYears = $diff->y + (($diff->m > 0 || $diff->d > 0) ? 1 : 0);
+                $tenureYears = max(1, $tenureYears);
             }
-            if ($amt > 0 || count($yearlyAmounts) === 1) {
+        } catch (Exception $eTenure) {}
+    }
+
+    if ($projectType === 'funding_agency') {
+        // Externally funded project: single budget input field, no yearly breakdown required
+        if ($singleBudget > 0) {
+            $budget = $singleBudget;
+        }
+        $yearlyBudgetMap = [];
+        $yearlyBudgetJson = null;
+    } else {
+        // Process Year-wise Budget Allocation for In-house projects
+        $yearlyAmounts = $_POST['yearly_budget_amount'] ?? [];
+        $yearlyLabels = $_POST['yearly_budget_year'] ?? [];
+        $yearlyBudgetMap = [];
+        $sumYearly = 0.0;
+        if (!empty($yearlyAmounts) && is_array($yearlyAmounts)) {
+            for ($yi = 0; $yi < count($yearlyAmounts); $yi++) {
+                $amt = (float)($yearlyAmounts[$yi] ?? 0);
+                $lbl = trim(sanitize($yearlyLabels[$yi] ?? ''));
+                if (empty($lbl)) {
+                    $lbl = 'Year ' . ($yi + 1);
+                }
                 $yearlyBudgetMap[$lbl] = $amt;
                 $sumYearly += $amt;
             }
         }
+        if ($sumYearly > 0) {
+            $budget = $sumYearly;
+        } elseif ($budget > 0 && empty($yearlyBudgetMap)) {
+            $yearlyBudgetMap = ['Year 1' => $budget];
+        }
+        $yearlyBudgetJson = !empty($yearlyBudgetMap) ? json_encode($yearlyBudgetMap) : null;
     }
-    if ($sumYearly > 0) {
-        $budget = $sumYearly;
-    } elseif ($budget > 0 && empty($yearlyBudgetMap)) {
-        $yearlyBudgetMap = ['Year 1' => $budget];
-    }
-    $yearlyBudgetJson = !empty($yearlyBudgetMap) ? json_encode($yearlyBudgetMap) : null;
 
     $budgetJustification = sanitize($_POST['budget_justification'] ?? '');
-    $startDate = !empty($_POST['proposed_start_date']) ? $_POST['proposed_start_date'] : null;
-    $endDate = !empty($_POST['proposed_end_date']) ? $_POST['proposed_end_date'] : null;
     $submissionRemarks = sanitize($_POST['submission_remarks'] ?? '');
 
     // Word count calculation helper
@@ -120,6 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $justWords = $countWords($justification);
     $alignWords = $countWords($alignment);
     $techWords = $countWords($technicalProgram);
+    $eoWords = $countWords($expectedOutcomes);
+    $bjWords = $countWords($budgetJustification);
 
     // Fetch target department code for station check & proposal numbering
     $effectiveDeptId = $deptId ?: (int)($currentUser['department_id'] ?: 1);
@@ -161,14 +185,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Specific Objectives are mandatory.";
         } elseif (empty($expectedOutcomes)) {
             $error = "Expected Outcomes & Deliverables are mandatory.";
-        } elseif ($budget <= 0) {
-            $error = "Proposed Budget is mandatory and must be greater than zero.";
-        } elseif (empty($budgetJustification)) {
-            $error = "Budget Justification is mandatory.";
         } elseif (empty($startDate) || empty($endDate)) {
             $error = "Both Proposed Start Date and End Date are mandatory.";
         } elseif (strtotime($endDate) <= strtotime($startDate)) {
             $error = "Proposed End Date must be after the Start Date.";
+        } elseif ($budget <= 0) {
+            $error = "Proposed Budget is mandatory and must be greater than zero.";
+        } elseif (empty($budgetJustification)) {
+            $error = "Budget Justification is mandatory.";
         } elseif ($rpWords > 100) {
             $error = "Research Problem / Key Questions must be strictly 100 words or less. Current word count is {$rpWords} words.";
         } elseif ($biWords > 100) {
@@ -181,6 +205,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Institute Alignment must be strictly 50 words or less. Current word count is {$alignWords} words.";
         } elseif ($techWords > 250) {
             $error = "Technical Program proposed must be strictly 250 words or less. Current word count is {$techWords} words.";
+        } elseif ($eoWords > 40) {
+            $error = "Expected Outcomes & Deliverables must be strictly 40 words or less. Current word count is {$eoWords} words.";
+        } elseif ($bjWords > 25) {
+            $error = "Budget Justification must be strictly 25 words or less. Current word count is {$bjWords} words.";
+        }
+
+        // Validate all year budget fields are provided and > 0 for all calculated tenure years (only for in-house projects)
+        if (!$error && $projectType === 'in_house') {
+            for ($yi = 1; $yi <= $tenureYears; $yi++) {
+                $lbl = "Year {$yi}";
+                $amt = (float)($yearlyBudgetMap[$lbl] ?? 0);
+                if ($amt <= 0) {
+                    $ordinalWord = ($yi === 1 ? '1st' : ($yi === 2 ? '2nd' : ($yi === 3 ? '3rd' : "{$yi}th")));
+                    $error = "Budget for {$ordinalWord} Year ({$lbl}) is mandatory and must be greater than zero.";
+                    break;
+                }
+            }
         }
     } else {
         // Draft saving: no mandatory fields required!
@@ -328,6 +369,7 @@ include __DIR__ . '/../includes/header.php';
 
 <form method="POST" action="<?= url("/scientist/create-proposal.php") ?>" enctype="multipart/form-data" id="proposal-form">
     <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+    <input type="hidden" name="submit_action" id="submit_action_hidden" value="draft">
 
     <!-- Section 1: Administrative Identification -->
     <div class="detail-section-card">
@@ -635,7 +677,7 @@ include __DIR__ . '/../includes/header.php';
                 <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <label class="form-label small fw-semibold text-secondary m-0">
-                            Technical Program Proposed (objective wise, also indicate the role of Co Pis) <span class="text-danger">*</span>
+                            Technical Program Proposed (objective wise, also indicate the role of Co-PIs) <span class="text-danger">*</span>
                         </label>
                         <span id="technical_program_counter" class="badge bg-light text-primary border fw-semibold">
                             <i class="bi bi-chat-left-text me-1"></i> 0 / 250 words
@@ -650,9 +692,23 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
 
+                <!-- Expected Outcomes & Deliverables - 40 words max -->
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Expected Outcomes & Deliverables <span class="text-danger">*</span></label>
-                    <textarea name="expected_outcomes" class="form-control" rows="3" placeholder="Technologies, patentable formulations, research papers, high-yielding prototypes..." required><?= e($_POST['expected_outcomes'] ?? '') ?></textarea>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-semibold text-secondary m-0">
+                            Expected Outcomes & Deliverables <span class="text-danger">*</span>
+                        </label>
+                        <span id="expected_outcomes_counter" class="badge bg-light text-primary border fw-semibold">
+                            <i class="bi bi-chat-left-text me-1"></i> 0 / 40 words
+                        </span>
+                    </div>
+                    <textarea name="expected_outcomes" id="expected_outcomes" class="form-control" rows="3" placeholder="Technologies, patentable formulations, research papers, high-yielding prototypes..." required oninput="updateFieldWordCount('expected_outcomes', 40)"><?= e($_POST['expected_outcomes'] ?? '') ?></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <div class="form-text text-muted extra-small">Specific measurable outcomes & deliverables (strictly 40 words or less).</div>
+                        <div id="expected_outcomes_warning" class="text-danger small fw-bold" style="display: none;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded! (Max 40 words)
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -679,24 +735,19 @@ include __DIR__ . '/../includes/header.php';
                     <input type="date" name="proposed_end_date" id="proposed_end_date" class="form-control" value="<?= e($endDate ?: date('Y-m-d', strtotime('+3 years +1 month'))) ?>" required onchange="calculateProjectDuration()">
                 </div>
 
-                <!-- Calculated Project Duration Banner with Quick Year Selectors -->
+                <!-- Calculated Project Duration Banner -->
                 <div class="col-12">
                     <div class="p-3 bg-light rounded border d-flex flex-wrap align-items-center justify-content-between gap-3" style="border-left: 4px solid #1a365d !important;">
                         <div>
                             <div class="fw-bold text-dark d-flex align-items-center">
                                 <i class="bi bi-hourglass-split text-primary fs-5 me-2"></i>
                                 <span>Project Duration:</span>
-                                <span id="project_duration_badge" class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fs-6 fw-bold ms-2">
-                                    3 Years
+                                <span id="project_duration_badge" class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1 fs-6 fw-bold ms-2">
+                                    Calculating duration...
                                 </span>
                             </div>
-                            <div class="text-muted extra-small mt-1">Calculated from start and end dates. Use quick presets to set standard project tenure:</div>
-                            <div class="d-flex flex-wrap gap-1 mt-2">
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.78rem;" onclick="setQuickDuration(1)">1 Year</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.78rem;" onclick="setQuickDuration(2)">2 Years</button>
-                                <button type="button" class="btn btn-xs btn-primary py-1 px-2 fw-semibold" style="font-size: 0.78rem;" id="btn-quick-dur-3" onclick="setQuickDuration(3)">3 Years (Standard)</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.78rem;" onclick="setQuickDuration(4)">4 Years</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2" style="font-size: 0.78rem;" onclick="setQuickDuration(5)">5 Years</button>
+                            <div class="text-muted extra-small mt-1">
+                                Duration is calculated automatically from Proposed Start Date and End Date (e.g. 1 year 5 months = 2 years tenure). All corresponding yearly budget fields will be generated below automatically.
                             </div>
                         </div>
                         <div class="d-flex align-items-center gap-2">
@@ -709,8 +760,60 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
-            <!-- Year-wise Budget Input Section -->
-            <div class="p-3 bg-white rounded border mb-3 shadow-xs">
+            <!-- Single Budget Input Section for Externally Funded Projects -->
+            <div id="single-budget-section" class="p-3 bg-white rounded border mb-3 shadow-xs" style="<?= ($projectType === 'funding_agency') ? '' : 'display: none;' ?>">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                    <div>
+                        <h6 class="fw-bold text-dark mb-0 d-flex align-items-center">
+                            <i class="bi bi-bank2 text-success me-2 fs-5"></i>
+                            Total External Project Budget / Grant Amount (₹ INR) <span class="text-danger">*</span>
+                        </h6>
+                        <span class="text-muted extra-small">
+                            For externally funded projects, enter the total project grant amount in this single input field. Yearly breakdown is not required.
+                        </span>
+                    </div>
+                    <div>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-3 fw-semibold">
+                            <i class="bi bi-check2-circle me-1"></i> Single Budget Field
+                        </span>
+                    </div>
+                </div>
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-7 col-lg-6">
+                        <label class="form-label small fw-bold text-dark mb-1" for="proposed_budget_single">
+                            Total Proposed / Sanctioned Budget (₹ INR) <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-white fw-bold text-success">₹</span>
+                            <input type="number" 
+                                   name="proposed_budget_single" 
+                                   id="proposed_budget_single" 
+                                   class="form-control fw-bold font-monospace text-primary fs-5" 
+                                   step="0.01" 
+                                   min="1" 
+                                   placeholder="e.g. 2500000" 
+                                   value="<?= ($budget > 0) ? e($budget) : '' ?>"
+                                   oninput="handleSingleBudgetChange(this.value)"
+                                   onchange="handleSingleBudgetChange(this.value)">
+                        </div>
+                        <div class="form-text extra-small text-muted mt-1">
+                            Enter the total sanctioned or proposed grant funding for the entire project duration.
+                        </div>
+                    </div>
+                    <div class="col-md-5 col-lg-6">
+                        <div class="p-3 rounded border bg-light">
+                            <div class="text-secondary small fw-semibold text-uppercase">Grant Overview</div>
+                            <div class="fw-bold fs-4 text-success font-monospace" id="single_budget_preview">
+                                <?= ($budget > 0) ? format_currency((float)$budget) : '₹ 0.00' ?>
+                            </div>
+                            <div class="text-muted extra-small">Single Project Grant Allocation</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Year-wise Budget Input Section (In-house Projects) -->
+            <div id="yearly-budget-section" class="p-3 bg-white rounded border mb-3 shadow-xs" style="<?= ($projectType === 'funding_agency') ? 'display: none;' : '' ?>">
                 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom">
                     <div>
                         <h6 class="fw-bold text-dark mb-0 d-flex align-items-center">
@@ -718,44 +821,19 @@ include __DIR__ . '/../includes/header.php';
                             Year-wise Budget Formulation (₹ INR) <span class="text-danger">*</span>
                         </h6>
                         <span class="text-muted extra-small">
-                            Enter Year 1 budget first. Based on the <span id="budget_tenure_hint" class="fw-bold text-primary">3-year project tenure</span>, click to add Year 2, Year 3, and subsequent years.
+                            Mandatory annual budget fields automatically populated based on <span id="budget_tenure_hint" class="fw-bold text-primary">project tenure</span>. All generated year fields are mandatory.
                         </span>
                     </div>
-                    <div id="add-year-btn-container">
-                        <button type="button" id="btn-add-year-budget" class="btn btn-sm btn-outline-primary fw-semibold shadow-xs" onclick="addNextYearBudgetRow()">
-                            <i class="bi bi-plus-circle me-1"></i> Add 2nd Year Budget
-                        </button>
+                    <div>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-1 px-3 fw-semibold" id="budget_fields_status_badge">
+                            <i class="bi bi-calendar-check me-1"></i> Active Years
+                        </span>
                     </div>
                 </div>
 
-                <!-- Dynamic Yearly Budget Container -->
+                <!-- Dynamic Yearly Budget Container (Populated automatically from Start & End Dates) -->
                 <div id="yearly-budget-container" class="row g-3 mb-3">
-                    <!-- Year 1 (Always Asked) -->
-                    <div class="col-md-6 col-lg-4 yearly-budget-row" id="row-year-1" data-year="1">
-                        <div class="p-3 rounded border bg-light h-100 position-relative">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="form-label small fw-bold text-dark m-0">
-                                    <i class="bi bi-1-circle-fill text-primary me-1"></i> Year 1 Budget (₹) <span class="text-danger">*</span>
-                                </label>
-                                <span class="badge bg-primary text-white extra-small">1st Year</span>
-                            </div>
-                            <div class="input-group">
-                                <span class="input-group-text bg-white fw-bold">₹</span>
-                                <input type="hidden" name="yearly_budget_year[]" value="Year 1">
-                                <input type="number" 
-                                       name="yearly_budget_amount[]" 
-                                       class="form-control fw-bold fs-6 yearly-budget-input" 
-                                       step="0.01" 
-                                       min="0" 
-                                       placeholder="e.g. 500000" 
-                                       id="budget_year_1"
-                                       value="<?= !empty($yearlyBudgetMap['Year 1']) ? (float)$yearlyBudgetMap['Year 1'] : ((!empty($budget) && empty($yearlyBudgetMap)) ? (float)$budget : '') ?>" 
-                                       required 
-                                       oninput="calculateTotalBudget()">
-                            </div>
-                            <div class="form-text extra-small text-muted mt-1">1st Year capital & operational outlay.</div>
-                        </div>
-                    </div>
+                    <!-- Populated dynamically by calculateProjectDuration() -->
                 </div>
 
                 <!-- Prominent Total Budget Summary Banner -->
@@ -776,11 +854,23 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
-            <!-- Budget Justification -->
+            <!-- Budget Justification - 25 words max -->
             <div class="col-12 mt-3">
-                <label class="form-label small fw-semibold text-secondary">Budget Justification <span class="text-danger">*</span></label>
-                <textarea name="budget_justification" class="form-control" rows="3" placeholder="Itemized breakdown (Consumables, Contingencies, Travel, Minor equipment, Analytical services across years)..." required><?= e($_POST['budget_justification'] ?? '') ?></textarea>
-                <div class="form-text extra-small text-muted">Provide head-wise justification for each project year.</div>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label small fw-semibold text-secondary m-0">
+                        Budget Justification <span class="text-danger">*</span>
+                    </label>
+                    <span id="budget_justification_counter" class="badge bg-light text-primary border fw-semibold">
+                        <i class="bi bi-chat-left-text me-1"></i> 0 / 25 words
+                    </span>
+                </div>
+                <textarea name="budget_justification" id="budget_justification" class="form-control" rows="3" placeholder="Itemized breakdown (Consumables, Contingencies, Travel, Minor equipment, Analytical services across years)..." required oninput="updateFieldWordCount('budget_justification', 25)"><?= e($_POST['budget_justification'] ?? '') ?></textarea>
+                <div class="d-flex justify-content-between align-items-center mt-1">
+                    <div class="form-text extra-small text-muted">Provide head-wise justification for each project year (strictly 25 words or less).</div>
+                    <div id="budget_justification_warning" class="text-danger small fw-bold" style="display: none;">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded! (Max 25 words)
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -803,10 +893,10 @@ include __DIR__ . '/../includes/header.php';
         <div class="card-body d-flex justify-content-between align-items-center">
             <a href="<?= $isHod ? url("/hod/dashboard.php") : url("/scientist/proposals.php") ?>" class="btn btn-outline-secondary">Cancel</a>
             <div class="d-flex gap-2">
-                <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="window.isDraftAction = true;">
+                <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="document.getElementById('submit_action_hidden').value = 'draft'; window.isDraftAction = true;">
                     <i class="bi bi-save me-1"></i> Save as Draft
                 </button>
-                <button type="submit" name="submit_action" value="submit" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" onclick="window.isDraftAction = false;">
+                <button type="submit" name="submit_action" value="submit" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" onclick="document.getElementById('submit_action_hidden').value = 'submit'; window.isDraftAction = false;">
                     <i class="bi bi-send-check me-1"></i> <?= $isHod ? 'Submit to Joint Director' : 'Submit to HOD' ?>
                 </button>
             </div>
@@ -831,43 +921,13 @@ const PORTAL_SCIENTISTS = <?= json_encode(array_map(function($s) {
     ];
 }, $portalScientists)) ?>;
 
-// --- 1. Project Duration Calculator & Year-wise Budget Manager ---
-window.projectDurationYears = 3;
+// Initial yearly budget data (for drafts / re-edits / validation returns)
+const INITIAL_YEARLY_BUDGET = <?= json_encode(!empty($yearlyBudgetMap) ? $yearlyBudgetMap : (object)[]) ?>;
+window.projectDurationYears = 1;
 
-function getOrdinal(n) {
-    const s = ["th", "st", "nd", "rd"];
-    const v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
-}
-
-function setQuickDuration(years) {
-    const startInput = document.getElementById('proposed_start_date');
-    const endInput = document.getElementById('proposed_end_date');
-    if (!startInput || !endInput) return;
-
-    let startDate = startInput.value ? new Date(startInput.value) : new Date();
-    if (isNaN(startDate.getTime())) startDate = new Date();
-
-    const endDate = new Date(startDate);
-    endDate.setFullYear(endDate.getFullYear() + years);
-    const yyyy = endDate.getFullYear();
-    const mm = String(endDate.getMonth() + 1).padStart(2, '0');
-    const dd = String(endDate.getDate()).padStart(2, '0');
-    endInput.value = `${yyyy}-${mm}-${dd}`;
-
-    // Highlight button
-    [1, 2, 3, 4, 5].forEach(y => {
-        const btn = document.getElementById(`btn-quick-dur-${y}`);
-        if (btn) {
-            if (y === years) {
-                btn.className = 'btn btn-xs btn-primary py-1 px-2 fw-semibold';
-            } else {
-                btn.className = 'btn btn-xs btn-outline-secondary py-1 px-2';
-            }
-        }
-    });
-
-    calculateProjectDuration();
+function getOrdinalWord(n) {
+    const words = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th'];
+    return words[n] || (n + 'th');
 }
 
 function calculateProjectDuration() {
@@ -884,38 +944,38 @@ function calculateProjectDuration() {
     if (!startVal || !endVal) {
         display.value = 'Please select start & end dates';
         if (badge) {
-            badge.className = 'badge bg-secondary-subtle text-secondary border px-3 py-2 fs-6';
+            badge.className = 'badge bg-secondary-subtle text-secondary border px-3 py-1 fs-6';
             badge.textContent = 'Dates Required';
         }
         return;
     }
 
-    const start = new Date(startVal);
-    const end = new Date(endVal);
+    const [y1, m1, d1] = startVal.split('-').map(Number);
+    const [y2, m2, d2] = endVal.split('-').map(Number);
 
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    if (!y1 || !m1 || !d1 || !y2 || !m2 || !d2) {
         display.value = 'Invalid Date format';
         return;
     }
 
-    if (end < start) {
+    const startDateObj = new Date(y1, m1 - 1, d1);
+    const endDateObj = new Date(y2, m2 - 1, d2);
+
+    if (endDateObj <= startDateObj) {
         display.value = 'Invalid: End date must be after start date';
         if (badge) {
-            badge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6';
+            badge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-1 fs-6';
             badge.textContent = 'Invalid Range';
         }
         return;
     }
-
-    let y1 = start.getFullYear(), m1 = start.getMonth(), d1 = start.getDate();
-    let y2 = end.getFullYear(), m2 = end.getMonth(), d2 = end.getDate();
 
     let years = y2 - y1;
     let months = m2 - m1;
     let days = d2 - d1;
 
     if (days < 0) {
-        const prevMonth = new Date(y2, m2, 0);
+        const prevMonth = new Date(y2, m2 - 1, 0);
         days += prevMonth.getDate();
         months--;
     }
@@ -925,153 +985,132 @@ function calculateProjectDuration() {
         years--;
     }
 
-    const yStr = years + (years === 1 ? ' Year' : ' Years');
-    const mStr = months + (months === 1 ? ' Month' : ' Months');
-    const dStr = days + (days === 1 ? ' Day' : ' Days');
-
-    const resultStr = `${yStr}, ${mStr}, ${dStr}`;
-    display.value = resultStr;
-
-    // Calculate total project years
+    // Standard formulation: any fractional months or days round UP to next full budget year
     let totalYears = years;
-    if (months > 0 || days > 15) {
+    if (months > 0 || days > 0) {
         totalYears += 1;
     }
-    if (totalYears < 1) totalYears = 1;
+    totalYears = Math.max(1, totalYears);
     window.projectDurationYears = totalYears;
 
+    const parts = [];
+    if (years > 0) parts.push(years + (years === 1 ? ' Year' : ' Years'));
+    if (months > 0) parts.push(months + (months === 1 ? ' Month' : ' Months'));
+    if (days > 0) parts.push(days + (days === 1 ? ' Day' : ' Days'));
+    const breakdownStr = parts.length > 0 ? parts.join(', ') : `${totalYears} Years`;
+
+    display.value = `${totalYears} Year${totalYears !== 1 ? 's' : ''} (${breakdownStr})`;
+
     if (badge) {
-        badge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6 fw-semibold';
-        badge.textContent = `${totalYears} Year${totalYears !== 1 ? 's' : ''} (${years}y ${months}m ${days}d)`;
+        badge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1 fs-6 fw-bold';
+        badge.textContent = `${totalYears} Year${totalYears !== 1 ? 's' : ''} (${breakdownStr})`;
     }
 
     const tenureHint = document.getElementById('budget_tenure_hint');
     if (tenureHint) {
-        tenureHint.textContent = `${totalYears}-year project tenure`;
+        tenureHint.textContent = `${totalYears} year${totalYears !== 1 ? 's' : ''}`;
     }
 
-    updateYearlyBudgetControls();
+    // Automatically synchronize yearly budget input fields
+    syncYearlyBudgetInputs(totalYears);
     calculateTotalBudget();
 }
 
-function updateYearlyBudgetControls() {
-    const container = document.getElementById('yearly-budget-container');
-    const btnContainer = document.getElementById('add-year-btn-container');
-    if (!container || !btnContainer) return;
-
-    const existingRows = container.querySelectorAll('.yearly-budget-row');
-    const currentCount = existingRows.length;
-    const maxYears = window.projectDurationYears || 3;
-
-    if (currentCount < maxYears) {
-        const nextYear = currentCount + 1;
-        const ordinal = getOrdinal(nextYear);
-        btnContainer.innerHTML = `
-            <button type="button" id="btn-add-year-budget" class="btn btn-sm btn-outline-primary fw-semibold shadow-xs" onclick="addNextYearBudgetRow()">
-                <i class="bi bi-plus-circle me-1"></i> Add ${ordinal} Year Budget (Year ${nextYear} of ${maxYears})
-            </button>
-        `;
-    } else {
-        btnContainer.innerHTML = `
-            <span class="badge bg-success-subtle text-success border border-success-subtle py-2 px-3">
-                <i class="bi bi-check2-circle me-1"></i> All ${maxYears} Years Budget Added
-            </span>
-        `;
-    }
-}
-
-function addNextYearBudgetRow(prefillAmount = '') {
+function syncYearlyBudgetInputs(totalYears) {
     const container = document.getElementById('yearly-budget-container');
     if (!container) return;
 
-    const existingRows = container.querySelectorAll('.yearly-budget-row');
-    const nextYear = existingRows.length + 1;
-    const maxYears = window.projectDurationYears || 3;
+    const fundingRadio = document.getElementById('type_funding_agency');
+    const isFunding = fundingRadio ? fundingRadio.checked : false;
 
-    if (nextYear > maxYears && existingRows.length >= maxYears) {
-        return;
-    }
+    // Collect currently entered values to preserve what the user already typed
+    const currentValues = {};
+    container.querySelectorAll('.yearly-budget-row').forEach(row => {
+        const y = parseInt(row.getAttribute('data-year'), 10);
+        const inp = row.querySelector('.yearly-budget-input');
+        if (y && inp && inp.value !== '') {
+            currentValues['Year ' + y] = inp.value;
+        }
+    });
 
-    const col = document.createElement('div');
-    col.className = 'col-md-6 col-lg-4 yearly-budget-row';
-    col.id = `row-year-${nextYear}`;
-    col.setAttribute('data-year', nextYear);
-
-    const ordinal = getOrdinal(nextYear);
-
-    col.innerHTML = `
-        <div class="p-3 rounded border bg-light h-100 position-relative shadow-xs">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <label class="form-label small fw-bold text-dark m-0">
-                    <i class="bi bi-${nextYear <= 9 ? nextYear : 'plus'}-circle-fill text-primary me-1"></i> Year ${nextYear} Budget (₹) <span class="text-danger">*</span>
-                </label>
-                <div class="d-flex align-items-center gap-1">
-                    <span class="badge bg-primary text-white extra-small">${ordinal} Year</span>
-                    <button type="button" class="btn btn-xs btn-outline-danger py-0 px-1" title="Remove Year ${nextYear}" onclick="removeYearBudgetRow(${nextYear})">
-                        <i class="bi bi-x"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="input-group">
-                <span class="input-group-text bg-white fw-bold">₹</span>
-                <input type="hidden" name="yearly_budget_year[]" value="Year ${nextYear}">
-                <input type="number" 
-                       name="yearly_budget_amount[]" 
-                       class="form-control fw-bold fs-6 yearly-budget-input" 
-                       step="0.01" 
-                       min="0" 
-                       placeholder="e.g. 400000" 
-                       id="budget_year_${nextYear}"
-                       value="${prefillAmount}" 
-                       required 
-                       oninput="calculateTotalBudget()">
-            </div>
-            <div class="form-text extra-small text-muted mt-1">${ordinal} Year operational & equipment budget.</div>
-        </div>
-    `;
-
-    container.appendChild(col);
-
-    const newInput = col.querySelector('.yearly-budget-input');
-    if (newInput) {
-        newInput.focus();
-    }
-
-    updateYearlyBudgetControls();
-    calculateTotalBudget();
-}
-
-function removeYearBudgetRow(yearNum) {
-    if (yearNum <= 1) return; // Year 1 cannot be removed
-    const row = document.getElementById(`row-year-${yearNum}`);
-    if (row) {
-        row.remove();
-    }
-    // Re-index remaining rows > 1
-    const container = document.getElementById('yearly-budget-container');
-    if (container) {
-        const rows = container.querySelectorAll('.yearly-budget-row');
-        rows.forEach((r, idx) => {
-            const y = idx + 1;
-            r.id = `row-year-${y}`;
-            r.setAttribute('data-year', y);
-            const hiddenYear = r.querySelector('input[name="yearly_budget_year[]"]');
-            if (hiddenYear) hiddenYear.value = `Year ${y}`;
-            const input = r.querySelector('.yearly-budget-input');
-            if (input) input.id = `budget_year_${y}`;
-            const label = r.querySelector('label');
-            if (label) {
-                label.innerHTML = `<i class="bi bi-${y <= 9 ? y : 'plus'}-circle-fill text-primary me-1"></i> Year ${y} Budget (₹) <span class="text-danger">*</span>`;
+    // Merge with INITIAL_YEARLY_BUDGET for any years not yet in currentValues
+    if (typeof INITIAL_YEARLY_BUDGET === 'object' && INITIAL_YEARLY_BUDGET !== null) {
+        Object.keys(INITIAL_YEARLY_BUDGET).forEach(k => {
+            if (currentValues[k] === undefined || currentValues[k] === '') {
+                const val = INITIAL_YEARLY_BUDGET[k];
+                if (val !== undefined && val !== null && val !== '') {
+                    currentValues[k] = val;
+                }
             }
         });
     }
 
-    updateYearlyBudgetControls();
-    calculateTotalBudget();
+    let html = '';
+    for (let y = 1; y <= totalYears; y++) {
+        const ord = getOrdinalWord(y);
+        const key = 'Year ' + y;
+        const val = currentValues[key] !== undefined && currentValues[key] !== null ? currentValues[key] : '';
+        const iconNum = y <= 9 ? y : 'circle';
+        const reqAttr = isFunding ? '' : 'required';
+        const disAttr = isFunding ? 'disabled' : '';
+
+        html += `
+            <div class="col-md-6 col-lg-4 yearly-budget-row" id="row-year-${y}" data-year="${y}">
+                <div class="p-3 rounded border bg-light h-100 position-relative shadow-2xs">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label small fw-bold text-dark m-0" for="budget_year_${y}">
+                            <i class="bi bi-${iconNum}-circle-fill text-primary me-1"></i> Year ${y} Budget (₹) <span class="text-danger">*</span>
+                        </label>
+                        <span class="badge bg-primary text-white extra-small">${ord} Year</span>
+                    </div>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white fw-bold">₹</span>
+                        <input type="hidden" name="yearly_budget_year[]" value="Year ${y}" ${disAttr}>
+                        <input type="number" 
+                               name="yearly_budget_amount[]" 
+                               class="form-control fw-bold fs-6 yearly-budget-input" 
+                               step="0.01" 
+                               min="0" 
+                               placeholder="e.g. 500000" 
+                               id="budget_year_${y}"
+                               value="${val}" 
+                               ${reqAttr} 
+                               ${disAttr}
+                               oninput="calculateTotalBudget()"
+                               onchange="calculateTotalBudget()">
+                    </div>
+                    <div class="form-text extra-small text-muted mt-1">${ord} Year capital & operational outlay.</div>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+
+    const statusBadge = document.getElementById('budget_fields_status_badge');
+    if (statusBadge) {
+        statusBadge.innerHTML = `<i class="bi bi-calendar-check me-1"></i> ${totalYears} Year${totalYears !== 1 ? 's' : ''} Mandatory`;
+    }
+
+    const tenureHint = document.getElementById('budget_tenure_hint');
+    if (tenureHint) {
+        tenureHint.textContent = `${totalYears} year${totalYears !== 1 ? 's' : ''}`;
+    }
 }
 
 function calculateTotalBudget() {
-    const inputs = document.querySelectorAll('.yearly-budget-input');
+    const fundingRadio = document.getElementById('type_funding_agency');
+    const isFunding = fundingRadio ? fundingRadio.checked : false;
+
+    if (isFunding) {
+        const singleInput = document.getElementById('proposed_budget_single');
+        if (singleInput && typeof handleSingleBudgetChange === 'function') {
+            handleSingleBudgetChange(singleInput.value);
+        }
+        return;
+    }
+
+    const inputs = document.querySelectorAll('.yearly-budget-input:not([disabled])');
     let total = 0;
     const breakdown = [];
 
@@ -1093,7 +1132,7 @@ function calculateTotalBudget() {
         hidden.value = total > 0 ? total.toFixed(2) : '';
     }
     if (badge) {
-        badge.textContent = `${inputs.length} Year${inputs.length !== 1 ? 's' : ''} Allocated`;
+        badge.textContent = `${inputs.length} Year${inputs.length !== 1 ? 's' : ''} Total`;
     }
 
     if (pillContainer) {
@@ -1101,8 +1140,8 @@ function calculateTotalBudget() {
         breakdown.forEach(item => {
             const pct = total > 0 ? ((item.amount / total) * 100).toFixed(1) : 0;
             const span = document.createElement('span');
-            span.className = 'badge bg-white text-dark border extra-small px-2 py-1 shadow-xs';
-            span.innerHTML = `<strong>Year ${item.year}:</strong> ₹ ${item.amount.toLocaleString('en-IN')} <span class="text-muted">(${pct}%)</span>`;
+            span.className = 'badge bg-white text-dark border extra-small px-2 py-1 shadow-2xs font-monospace';
+            span.innerHTML = `<span class="text-primary fw-bold">Yr ${item.year}:</span> ₹ ${item.amount.toLocaleString('en-IN')} <span class="text-muted">(${pct}%)</span>`;
             pillContainer.appendChild(span);
         });
     }
@@ -1533,7 +1572,24 @@ function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
-// --- 3. Toggle Funding Agency Input ---
+// --- Single Budget Handler for Externally Funded Projects ---
+window.handleSingleBudgetChange = function(val) {
+    const amt = parseFloat(val) || 0;
+    const hidden = document.getElementById('proposed_budget');
+    if (hidden) {
+        hidden.value = amt > 0 ? amt : '';
+    }
+    const preview = document.getElementById('single_budget_preview');
+    if (preview) {
+        preview.textContent = '₹ ' + amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    const display = document.getElementById('total_budget_display');
+    if (display) {
+        display.textContent = '₹ ' + amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+};
+
+// --- 3. Toggle Funding Agency Input & Budget Formulation Mode ---
 window.toggleFundingAgencyInput = function() {
     const fundingRadio = document.getElementById('type_funding_agency');
     const isFunding = fundingRadio ? fundingRadio.checked : false;
@@ -1541,6 +1597,9 @@ window.toggleFundingAgencyInput = function() {
     const input = document.getElementById('funding_agency');
     const inHouseBox = document.getElementById('box-in-house');
     const fundingBox = document.getElementById('box-funding-agency');
+    const yearlySec = document.getElementById('yearly-budget-section');
+    const singleSec = document.getElementById('single-budget-section');
+    const singleInput = document.getElementById('proposed_budget_single');
 
     if (wrapper) {
         wrapper.style.display = isFunding ? 'block' : 'none';
@@ -1551,6 +1610,45 @@ window.toggleFundingAgencyInput = function() {
             input.value = '';
         }
     }
+
+    if (isFunding) {
+        // Externally funded project: DO NOT ask budget yearly wise! Show single input field.
+        if (yearlySec) yearlySec.style.display = 'none';
+        if (singleSec) singleSec.style.display = 'block';
+        if (singleInput) {
+            singleInput.required = true;
+            singleInput.disabled = false;
+            handleSingleBudgetChange(singleInput.value);
+        }
+        // Remove required and disable yearly inputs
+        document.querySelectorAll('.yearly-budget-input').forEach(el => {
+            el.removeAttribute('required');
+            el.disabled = true;
+        });
+        document.querySelectorAll('input[name="yearly_budget_year[]"]').forEach(el => {
+            el.disabled = true;
+        });
+    } else {
+        // In-house project: Show year-wise budget formulation
+        if (yearlySec) yearlySec.style.display = 'block';
+        if (singleSec) singleSec.style.display = 'none';
+        if (singleInput) {
+            singleInput.required = false;
+            singleInput.disabled = true;
+        }
+        // Restore required and enable yearly inputs
+        document.querySelectorAll('.yearly-budget-input').forEach(el => {
+            el.setAttribute('required', 'required');
+            el.disabled = false;
+        });
+        document.querySelectorAll('input[name="yearly_budget_year[]"]').forEach(el => {
+            el.disabled = false;
+        });
+        if (typeof calculateTotalBudget === 'function') {
+            calculateTotalBudget();
+        }
+    }
+
     if (inHouseBox && fundingBox) {
         if (isFunding) {
             fundingBox.classList.add('border-success', 'bg-success-subtle');
@@ -1642,7 +1740,9 @@ document.addEventListener('DOMContentLoaded', function() {
         'novelty_gap_analysis': 75,
         'justification_end_users': 100,
         'institute_alignment': 50,
-        'technical_program': 250
+        'technical_program': 250,
+        'expected_outcomes': 40,
+        'budget_justification': 25
     };
 
     window.updateFieldWordCount = function(fieldId, maxWords) {
@@ -1690,8 +1790,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (isDraft) {
                 // Draft saving: bypass word count alerts and required checks!
+                const draftActionInput = document.getElementById('submit_action_hidden');
+                if (draftActionInput) draftActionInput.value = 'draft';
                 form.querySelectorAll('[required]').forEach(el => el.removeAttribute('required'));
                 return true;
+            }
+
+            const fundingRadio = document.getElementById('type_funding_agency');
+            const isFunding = fundingRadio ? fundingRadio.checked : false;
+
+            if (isFunding) {
+                // Externally funded project: Enforce single budget field
+                const singleInput = document.getElementById('proposed_budget_single');
+                const singleAmt = parseFloat(singleInput ? singleInput.value : 0) || 0;
+                if (singleAmt <= 0) {
+                    e.preventDefault();
+                    if (singleInput) {
+                        singleInput.focus();
+                        singleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    alert('Total Proposed Budget is mandatory and must be greater than zero.');
+                    return false;
+                }
+            } else {
+                // In-house project: Enforce yearly budget inputs on submission
+                const yearlyInputs = form.querySelectorAll('.yearly-budget-input');
+                for (let i = 0; i < yearlyInputs.length; i++) {
+                    const inp = yearlyInputs[i];
+                    const amt = parseFloat(inp.value) || 0;
+                    if (amt <= 0) {
+                        e.preventDefault();
+                        inp.focus();
+                        inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        alert(`Year ${i + 1} Budget is mandatory and must be greater than zero.`);
+                        return false;
+                    }
+                }
             }
 
             // Enforce word counts on submission
