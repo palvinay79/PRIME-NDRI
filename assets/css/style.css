@@ -313,7 +313,13 @@ body {
     color: #334155;
 }
 
+.rich-text-content > *:first-child,
+.rich-text-content p:first-child {
+    margin-top: 0 !important;
+}
+
 .rich-text-content p {
+    margin-top: 0;
     margin-bottom: 0.75rem;
 }
 

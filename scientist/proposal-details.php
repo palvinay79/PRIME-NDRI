@@ -418,8 +418,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-gear-wide-connected text-primary"></i> Technical Program Proposed (objective wise, also indicate the role of Co Pis)
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-secondary small" style="line-height: 1.6; white-space: pre-wrap;">
-                        <?= e($proposal['technical_program'] ?: 'None specified.') ?>
+                    <div class="p-3 bg-light rounded border rich-text-preview">
+                        <?= render_rich_text(clean_multiline_text($proposal['technical_program'] ?? ''), 'None specified.') ?>
                     </div>
                 </div>
             </div>

@@ -49,7 +49,33 @@ function e(?string $string): string {
  */
 function sanitize(?string $input): string {
     if ($input === null) return '';
-    return trim(strip_tags($input));
+    $clean = strip_tags($input);
+    // Strip leading and trailing whitespace, including non-breaking spaces (\xc2\xa0), BOM, zero-width spaces
+    $clean = preg_replace('/^[\s\p{Z}\x00-\x20\xc2\xa0\xe2\x80\x80-\xe2\x80\x8b\xef\xbb\xbf]+/u', '', $clean);
+    $clean = preg_replace('/[\s\p{Z}\x00-\x20\xc2\xa0\xe2\x80\x80-\xe2\x80\x8b\xef\xbb\xbf]+$/u', '', $clean);
+    return trim($clean);
+}
+
+/**
+ * Clean multiline text input (normalizes newlines and thoroughly removes leading/trailing blank spaces, blank lines, &nbsp; entities, and indentation)
+ */
+function clean_multiline_text(?string $input): string {
+    if ($input === null) return '';
+    // 1. Decode entities like &nbsp;, &#160;, &ensp;, &emsp;
+    $clean = html_entity_decode($input, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    // 2. Replace non-breaking space variants and common space entities with normal spaces
+    $clean = str_replace(["\xc2\xa0", '&nbsp;', '&#160;', '&ensp;', '&emsp;', '&#8203;', '&thinsp;'], ' ', $clean);
+    // 3. Strip HTML tags
+    $clean = strip_tags($clean);
+    // 4. Normalize line endings to \n
+    $clean = str_replace(["\r\n", "\r"], "\n", $clean);
+    // 5. Remove leading unicode spaces, spaces, tabs, newlines, zero-width characters, BOM
+    $clean = preg_replace('/^[\s\p{Z}\x00-\x20\xc2\xa0\xe2\x80\x80-\xe2\x80\x8b\xef\xbb\xbf]+/u', '', $clean);
+    // 6. Remove trailing whitespace
+    $clean = preg_replace('/[\s\p{Z}\x00-\x20\xc2\xa0\xe2\x80\x80-\xe2\x80\x8b\xef\xbb\xbf]+$/u', '', $clean);
+    // 7. Strip any remaining leading blank space/tabs on the first line
+    $clean = ltrim($clean, " \t\r\n\0\x0B\xc2\xa0");
+    return trim($clean);
 }
 
 /**
@@ -115,15 +141,30 @@ function clean_text_preview(?string $text, int $limit = 160, string $fallback = 
  * Render rich text content safely (supports CKEditor HTML, entity-encoded HTML, and legacy plain text with newlines)
  */
 function render_rich_text(?string $text, string $fallback = 'None specified.'): string {
-    if ($text === null || trim($text) === '') {
+    if ($text === null) {
         return '<span class="text-muted">' . e($fallback) . '</span>';
     }
 
-    $content = trim($text);
+    $content = $text;
 
     // If text contains entity-encoded HTML tags (e.g. &lt;p&gt;, &lt;strong&gt;, etc.), decode them first
     if (preg_match('/&lt;(p|br|div|span|strong|b|em|i|u|ul|ol|li|h[1-6]|table|tr|td|th)[^&]*?&gt;/i', $content)) {
         $content = html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+
+    // Strip leading and trailing empty HTML tags, blank paragraphs, empty lines, &nbsp;, and whitespace
+    $reLeading = '~^(?:\s|&nbsp;|&#160;|\xc2\xa0|<p[^>]*>(?:\s|&nbsp;|&#160;|\xc2\xa0|<br\s*/?>)*</p>|<br\s*/?>|<div>(?:\s|&nbsp;|&#160;|\xc2\xa0|<br\s*/?>)*</div>)+~iu';
+    $reTrailing = '~(?:<p[^>]*>(?:\s|&nbsp;|&#160;|\xc2\xa0|<br\s*/?>)*</p>|<br\s*/?>|<div>(?:\s|&nbsp;|&#160;|\xc2\xa0|<br\s*/?>)*</div>|\s|&nbsp;|&#160;|\xc2\xa0)+$~iu';
+    
+    $content = preg_replace($reLeading, '', $content);
+    $content = preg_replace($reTrailing, '', $content);
+
+    $content = preg_replace('/^[\s\p{Z}\x00-\x20\xc2\xa0\xe2\x80\x80-\xe2\x80\x8b\xef\xbb\xbf]+/u', '', $content);
+    $content = preg_replace('/[\s\p{Z}\x00-\x20\xc2\xa0\xe2\x80\x80-\xe2\x80\x8b\xef\xbb\xbf]+$/u', '', $content);
+    $content = trim($content);
+
+    if ($content === '') {
+        return '<span class="text-muted">' . e($fallback) . '</span>';
     }
 
     // Check if contains actual HTML tags
@@ -131,7 +172,7 @@ function render_rich_text(?string $text, string $fallback = 'None specified.'): 
         return '<div class="rich-text-content">' . sanitize_html($content) . '</div>';
     }
 
-    return '<div class="rich-text-content" style="white-space: pre-wrap; line-height: 1.6;">' . nl2br(e($content)) . '</div>';
+    return '<div class="rich-text-content" style="line-height: 1.6; word-break: break-word;">' . nl2br(e($content)) . '</div>';
 }
 
 /**

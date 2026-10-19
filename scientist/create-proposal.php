@@ -43,6 +43,7 @@ $yearlyBudgetMap = [];
 $institutePriority = '';
 $nationalPriority = '';
 $discipline = $currentUser['discipline'] ?? '';
+$technicalProgram = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
@@ -73,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $noveltyGap = sanitize($_POST['novelty_gap_analysis'] ?? '');
     $justification = sanitize($_POST['justification_end_users'] ?? '');
     $alignment = sanitize($_POST['institute_alignment'] ?? '');
-    $technicalProgram = sanitize($_POST['technical_program'] ?? '');
+    $technicalProgram = clean_multiline_text($_POST['technical_program'] ?? '');
     $objectives = sanitize_html($_POST['objectives'] ?? '');
     $methodology = null; // Methodology field removed as per requirements
     $expectedOutcomes = sanitize($_POST['expected_outcomes'] ?? '');
@@ -683,7 +684,7 @@ include __DIR__ . '/../includes/header.php';
                             <i class="bi bi-chat-left-text me-1"></i> 0 / 250 words
                         </span>
                     </div>
-                    <textarea name="technical_program" id="technical_program" class="form-control" rows="6" placeholder="1&#10;2&#10;3" required oninput="updateFieldWordCount('technical_program', 250)"><?= e($technicalProgram ?? '') ?></textarea>
+                    <textarea name="technical_program" id="technical_program" class="form-control" rows="6" placeholder="1. Work package or objective-wise milestones&#10;2. Specific activities & technical methodologies&#10;3. Explicit role and responsibilities of Co-PIs..." required oninput="updateFieldWordCount('technical_program', 250)"><?= e(clean_multiline_text($technicalProgram ?? '')) ?></textarea>
                     <div class="d-flex justify-content-between align-items-center mt-1">
                         <div class="form-text text-muted extra-small">Objective-wise technical program, indicating the role of Co-PIs (max 250 words).</div>
                         <div id="technical_program_warning" class="text-danger small fw-bold" style="display: none;">
@@ -1775,6 +1776,14 @@ document.addEventListener('DOMContentLoaded', function() {
         updateFieldWordCount(id, WORD_LIMITS[id]);
     });
 
+    const techEl = document.getElementById('technical_program');
+    if (techEl) {
+        techEl.addEventListener('blur', function() {
+            this.value = this.value.replace(/^[\s\u00A0\u2000-\u200B]+/g, '');
+            updateFieldWordCount('technical_program', 250);
+        });
+    }
+
     // F. Form submission: Synchronize CKEditor data and validate word limits
     const form = document.getElementById('proposal-form');
     if (form) {
@@ -1782,6 +1791,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (objectivesEditor) {
                 const data = objectivesEditor.getData();
                 document.querySelector('#objectives').value = data;
+            }
+
+            const techProg = document.getElementById('technical_program');
+            if (techProg && techProg.value) {
+                techProg.value = techProg.value.replace(/^[\s\u00A0\u2000-\u200B]+/g, '');
             }
 
             const submitBtn = e.submitter || document.activeElement;

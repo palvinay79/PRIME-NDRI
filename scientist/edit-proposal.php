@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $noveltyGap = sanitize($_POST['novelty_gap_analysis'] ?? '');
     $justification = sanitize($_POST['justification_end_users'] ?? '');
     $alignment = sanitize($_POST['institute_alignment'] ?? '');
-    $technicalProgram = sanitize($_POST['technical_program'] ?? '');
+    $technicalProgram = clean_multiline_text($_POST['technical_program'] ?? '');
     $objectives = sanitize_html($_POST['objectives'] ?? '');
     $methodology = null; // Methodology removed
     $expectedOutcomes = sanitize($_POST['expected_outcomes'] ?? '');
@@ -281,12 +281,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $newStatus = STATUS_SUBMITTED_HOD;
                 }
+            } elseif ($submissionAction === 'draft') {
+                if ($prevStatus === STATUS_RETURNED_HOD || $prevStatus === STATUS_RETURNED_JD) {
+                    $newStatus = $prevStatus;
+                } elseif ($prevStatus === STATUS_SUBMITTED_HOD || $prevStatus === STATUS_FORWARDED_JD) {
+                    $newStatus = $prevStatus;
+                } else {
+                    $newStatus = STATUS_DRAFT;
+                }
             } elseif ($prevStatus === STATUS_SUBMITTED_HOD) {
                 // Remains submitted to HOD so HOD reviews the latest edited version
                 $newStatus = STATUS_SUBMITTED_HOD;
             } elseif ($prevStatus === STATUS_FORWARDED_JD && $isHod) {
                 // HOD updating while under Joint Director review
                 $newStatus = STATUS_FORWARDED_JD;
+            } else {
+                $newStatus = STATUS_DRAFT;
             }
 
             $submissionRemarksToSave = !empty($resubmitRemarks) ? $resubmitRemarks : ($proposal['submission_remarks'] ?? null);
@@ -352,6 +362,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 record_status_history($id, $prevStatus, $newStatus, $userId, $currentUser['role_name'], $histComment);
                 log_audit($userId, 'PROPOSAL_RESUBMITTED', 'proposals', $id, "Proposal {$proposal['proposal_number']} resubmitted by {$submitterRole}.");
+            } elseif ($submissionAction === 'draft') {
+                record_status_history($id, $prevStatus, $newStatus, $userId, $currentUser['role_name'], 'Draft proposal changes saved.');
+                log_audit($userId, 'PROPOSAL_DRAFT_UPDATED', 'proposals', $id, "Proposal {$proposal['proposal_number']} draft updated. Continuing in edit mode.");
             } elseif ($prevStatus === STATUS_FORWARDED_JD && $isHod) {
                 $histComment = "Proposal updated with revisions by Head of Department while pending Joint Director review.";
                 if (!empty($resubmitRemarks)) {
@@ -377,18 +390,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $db->commit();
 
-            if ($submissionAction === 'resubmit' || $submissionAction === 'submit') {
+            if ($submissionAction === 'draft') {
+                flash('success', "Draft proposal changes saved successfully. Continuing in edit mode.");
+                header("Location: " . url("/scientist/edit-proposal.php?id={$id}"));
+            } elseif ($submissionAction === 'update_submitted') {
+                flash('success', "Proposal {$proposal['proposal_number']} was successfully updated. Continuing in edit mode.");
+                header("Location: " . url("/scientist/edit-proposal.php?id={$id}"));
+            } elseif ($submissionAction === 'resubmit' || $submissionAction === 'submit') {
                 if ($isHod) {
                     flash('success', "Proposal {$proposal['proposal_number']} has been successfully submitted directly to Joint Director for review.");
                 } else {
                     flash('success', "Proposal {$proposal['proposal_number']} has been successfully resubmitted to Head of Department for review.");
                 }
-                header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
-            } elseif ($prevStatus === STATUS_FORWARDED_JD && $isHod) {
-                flash('success', "Proposal {$proposal['proposal_number']} was successfully updated and remains submitted to Joint Director for review.");
-                header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
-            } elseif ($prevStatus === STATUS_SUBMITTED_HOD) {
-                flash('success', "Proposal {$proposal['proposal_number']} was successfully updated and remains submitted to Head of Department for review.");
                 header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
             } else {
                 flash('success', "Draft proposal changes saved successfully. Continuing in edit mode.");
@@ -759,7 +772,7 @@ include __DIR__ . '/../includes/header.php';
                             <i class="bi bi-chat-left-text me-1"></i> 0 / 250 words
                         </span>
                     </div>
-                    <textarea name="technical_program" id="technical_program" class="form-control" rows="6" placeholder="1&#10;2&#10;3" required oninput="updateFieldWordCount('technical_program', 250)"><?= e($proposal['technical_program'] ?? '') ?></textarea>
+                    <textarea name="technical_program" id="technical_program" class="form-control" rows="6" placeholder="1. Work package or objective-wise milestones&#10;2. Specific activities & technical methodologies&#10;3. Explicit role and responsibilities of Co-PIs..." required oninput="updateFieldWordCount('technical_program', 250)"><?= e(clean_multiline_text($proposal['technical_program'] ?? '')) ?></textarea>
                     <div class="d-flex justify-content-between align-items-center mt-1">
                         <div class="form-text text-muted extra-small">Objective-wise technical program, indicating the role of Co-PIs (max 250 words).</div>
                         <div id="technical_program_warning" class="text-danger small fw-bold" style="display: none;">
@@ -997,10 +1010,16 @@ include __DIR__ . '/../includes/header.php';
             <a href="<?= url("/scientist/proposal-details.php?id=" . ($id) . "") ?>" class="btn btn-outline-secondary">Cancel</a>
             <div class="d-flex gap-2">
                 <?php if ($proposal['current_status'] === STATUS_SUBMITTED_HOD): ?>
+                    <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="document.getElementById('submit_action_hidden').value = 'draft'; window.isDraftAction = true;">
+                        <i class="bi bi-save me-1"></i> Save Changes (Draft)
+                    </button>
                     <button type="submit" name="submit_action" value="update_submitted" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Are you sure you want to save updates to this proposal?" onclick="document.getElementById('submit_action_hidden').value = 'update_submitted'; window.isDraftAction = false;">
                         <i class="bi bi-check2-circle me-1"></i> Save Updates (Keep with HOD)
                     </button>
                 <?php elseif ($proposal['current_status'] === STATUS_FORWARDED_JD && $isHod): ?>
+                    <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="document.getElementById('submit_action_hidden').value = 'draft'; window.isDraftAction = true;">
+                        <i class="bi bi-save me-1"></i> Save Changes (Draft)
+                    </button>
                     <button type="submit" name="submit_action" value="update_submitted" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Are you sure you want to save updates to this proposal?" onclick="document.getElementById('submit_action_hidden').value = 'update_submitted'; window.isDraftAction = false;">
                         <i class="bi bi-check2-circle me-1"></i> Save Updates (Keep with Joint Director)
                     </button>
@@ -1845,6 +1864,14 @@ document.addEventListener('DOMContentLoaded', function() {
         updateFieldWordCount(id, WORD_LIMITS[id]);
     });
 
+    const techEl = document.getElementById('technical_program');
+    if (techEl) {
+        techEl.addEventListener('blur', function() {
+            this.value = this.value.replace(/^[\s\u00A0\u2000-\u200B]+/g, '');
+            updateFieldWordCount('technical_program', 250);
+        });
+    }
+
     // F. Form submission: Synchronize CKEditor data and validate word limits
     const form = document.getElementById('proposal-form');
     if (form) {
@@ -1852,6 +1879,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (objectivesEditor) {
                 const data = objectivesEditor.getData();
                 document.querySelector('#objectives').value = data;
+            }
+
+            const techProg = document.getElementById('technical_program');
+            if (techProg && techProg.value) {
+                techProg.value = techProg.value.replace(/^[\s\u00A0\u2000-\u200B]+/g, '');
             }
 
             const submitBtn = e.submitter || document.activeElement;

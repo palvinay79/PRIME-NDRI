@@ -392,7 +392,7 @@ $builder->addHeading("6. OBJECTIVES & TECHNICAL PROGRAM");
 $builder->addKeyValueRow("Specific Objectives", "");
 $builder->addRichText($proposal['objectives']);
 $builder->addKeyValueRow("Technical Program Proposed (objective wise, also indicate the role of Co Pis)", "");
-$builder->addRichText($proposal['technical_program']);
+$builder->addRichText(clean_multiline_text($proposal['technical_program'] ?? ''));
 
 // Section 7: Expected Outcomes & Budget
 $builder->addHeading("7. EXPECTED OUTCOMES & BUDGET JUSTIFICATION");
