@@ -46,10 +46,13 @@ $currentUser = current_user();
 // Fetch Co-PIs
 $copis = get_proposal_copis($id, (int)($proposal['linked_project_id'] ?? 0), (string)($proposal['project_number'] ?? ''));
 
-// Fetch Documents
+// Fetch Documents (filter out empty entries)
 $stmt = $db->prepare("SELECT * FROM proposal_documents WHERE proposal_id = ? ORDER BY created_at DESC");
 $stmt->execute([$id]);
-$documents = $stmt->fetchAll();
+$rawDocuments = $stmt->fetchAll();
+$documents = array_values(array_filter($rawDocuments, function($doc) {
+    return !empty(trim($doc['file_name'] ?? '')) && !empty(trim($doc['file_path'] ?? ''));
+}));
 
 // Fetch Workflow Status History
 $stmt = $db->prepare("SELECT h.*, u.name as user_name
@@ -604,15 +607,13 @@ include __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <!-- Attached Annexures -->
-        <div class="detail-section-card">
-            <div class="detail-section-header">
-                <i class="bi bi-paperclip text-primary"></i> Attached Documents
-            </div>
-            <div class="detail-section-body p-2">
-                <?php if (empty($documents)): ?>
-                    <p class="text-muted small p-2 mb-0">No files attached to this proposal.</p>
-                <?php else: ?>
+        <!-- Attached Annexures (Only visible if documents are attached) -->
+        <?php if (!empty($documents)): ?>
+            <div class="detail-section-card">
+                <div class="detail-section-header">
+                    <i class="bi bi-paperclip text-primary"></i> Attached Documents
+                </div>
+                <div class="detail-section-body p-2">
                     <div class="list-group list-group-flush">
                         <?php foreach ($documents as $doc): ?>
                             <div class="list-group-item px-2 py-2 d-flex justify-content-between align-items-center">
@@ -626,9 +627,9 @@ include __DIR__ . '/../includes/header.php';
                             </div>
                         <?php endforeach; ?>
                     </div>
-                <?php endif; ?>
+                </div>
             </div>
-        </div>
+        <?php endif; ?>
 
         <!-- Complete Approval Workflow History Timeline -->
         <div class="detail-section-card">

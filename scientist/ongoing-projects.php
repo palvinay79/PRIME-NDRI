@@ -62,7 +62,10 @@ if ($editProposalId > 0) {
     // Fetch existing documents
     $stmtDocs = $db->prepare("SELECT * FROM proposal_documents WHERE proposal_id = ? ORDER BY id ASC");
     $stmtDocs->execute([$editProposalId]);
-    $existingDocs = $stmtDocs->fetchAll();
+    $rawExistingDocs = $stmtDocs->fetchAll();
+    $existingDocs = array_values(array_filter($rawExistingDocs, function($d) {
+        return !empty(trim($d['file_name'] ?? '')) && !empty(trim($d['file_path'] ?? ''));
+    }));
 }
 
 // Fetch department

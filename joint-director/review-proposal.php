@@ -57,9 +57,12 @@ $comments = $comments->fetchAll();
 $copis = get_proposal_copis($id, (int)($proposal['linked_project_id'] ?? 0), (string)($proposal['project_number'] ?? ''));
 $hodInfo = get_hod_approver_info($id, (int)$proposal['department_id']);
 
-$docs = $db->prepare("SELECT * FROM proposal_documents WHERE proposal_id = ?");
-$docs->execute([$id]);
-$docs = $docs->fetchAll();
+$docsStmt = $db->prepare("SELECT * FROM proposal_documents WHERE proposal_id = ?");
+$docsStmt->execute([$id]);
+$rawDocs = $docsStmt->fetchAll();
+$docs = array_values(array_filter($rawDocs, function($d) {
+    return !empty(trim($d['file_name'] ?? '')) && !empty(trim($d['file_path'] ?? ''));
+}));
 
 $error = null;
 

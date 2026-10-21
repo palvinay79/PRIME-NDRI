@@ -61,9 +61,12 @@ $scientistRemarkData = get_latest_scientist_remark($id, $proposal);
 $commentsList = get_proposal_comments($id);
 $statusHistory = get_proposal_status_history($id);
 
-$docs = $db->prepare("SELECT * FROM proposal_documents WHERE proposal_id = ?");
-$docs->execute([$id]);
-$docs = $docs->fetchAll();
+$docsStmt = $db->prepare("SELECT * FROM proposal_documents WHERE proposal_id = ?");
+$docsStmt->execute([$id]);
+$rawDocs = $docsStmt->fetchAll();
+$docs = array_values(array_filter($rawDocs, function($d) {
+    return !empty(trim($d['file_name'] ?? '')) && !empty(trim($d['file_path'] ?? ''));
+}));
 
 $error = null;
 

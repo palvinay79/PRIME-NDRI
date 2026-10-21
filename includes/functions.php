@@ -184,11 +184,34 @@ function format_duration(?string $startDate, ?string $endDate): string {
         $start = new DateTime($startDate);
         $end = new DateTime($endDate);
         if ($end < $start) return 'Invalid timeline (End before Start)';
-        $diff = $start->diff($end);
+
+        // In research projects, tenure runs through the end date inclusively (e.g., 01-04-2026 to 31-03-2028 is exactly 2 Years)
+        $endInclusive = (clone $end)->modify('+1 day');
+        $diff = $start->diff($endInclusive);
+
+        $years = (int)$diff->y;
+        $months = (int)$diff->m;
+        $days = (int)$diff->d;
+
+        // If raw exclusive diff or inclusive diff reaches 11 months and 28+ days (e.g. 11 months and 30 days), round up to full year
+        $diffRaw = $start->diff($end);
+        if (($diffRaw->m === 11 && $diffRaw->d >= 28) || ($months === 11 && $days >= 28)) {
+            $years = max($years, (int)$diffRaw->y + 1);
+            $months = 0;
+            $days = 0;
+        } elseif ($days >= 30) {
+            $months += 1;
+            $days = 0;
+            if ($months >= 12) {
+                $years += 1;
+                $months = 0;
+            }
+        }
+
         $parts = [];
-        if ($diff->y > 0) $parts[] = $diff->y . ($diff->y === 1 ? ' Year' : ' Years');
-        if ($diff->m > 0) $parts[] = $diff->m . ($diff->m === 1 ? ' Month' : ' Months');
-        if ($diff->d > 0 || empty($parts)) $parts[] = $diff->d . ($diff->d === 1 ? ' Day' : ' Days');
+        if ($years > 0) $parts[] = $years . ($years === 1 ? ' Year' : ' Years');
+        if ($months > 0) $parts[] = $months . ($months === 1 ? ' Month' : ' Months');
+        if ($days > 0 || empty($parts)) $parts[] = $days . ($days === 1 ? ' Day' : ' Days');
         return implode(', ', $parts);
     } catch (Exception $e) {
         return 'Not specified';

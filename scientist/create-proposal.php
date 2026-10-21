@@ -986,6 +986,20 @@ function calculateProjectDuration() {
         years--;
     }
 
+    // If inclusive tenure gives 11 months and 28+ days (e.g. 11 months and 30 days), round up to full year
+    if (months === 11 && days >= 28) {
+        years += 1;
+        months = 0;
+        days = 0;
+    } else if (days >= 30) {
+        months += 1;
+        days = 0;
+        if (months >= 12) {
+            years += 1;
+            months = 0;
+        }
+    }
+
     // Standard formulation: any fractional months or days round UP to next full budget year
     let totalYears = years;
     if (months > 0 || days > 0) {
@@ -1000,11 +1014,12 @@ function calculateProjectDuration() {
     if (days > 0) parts.push(days + (days === 1 ? ' Day' : ' Days'));
     const breakdownStr = parts.length > 0 ? parts.join(', ') : `${totalYears} Years`;
 
-    display.value = `${totalYears} Year${totalYears !== 1 ? 's' : ''} (${breakdownStr})`;
+    const displayText = (parts.length === 1 && years > 0) ? `${years} Year${years !== 1 ? 's' : ''}` : `${totalYears} Year${totalYears !== 1 ? 's' : ''} (${breakdownStr})`;
+    display.value = displayText;
 
     if (badge) {
         badge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1 fs-6 fw-bold';
-        badge.textContent = `${totalYears} Year${totalYears !== 1 ? 's' : ''} (${breakdownStr})`;
+        badge.textContent = displayText;
     }
 
     const tenureHint = document.getElementById('budget_tenure_hint');

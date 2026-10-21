@@ -1477,6 +1477,20 @@ function calculateProjectDuration() {
         months += 12;
     }
 
+    // If inclusive tenure gives 11 months and 28+ days (e.g. 11 months and 30 days), round up to full year
+    if (months === 11 && days >= 28) {
+        years += 1;
+        months = 0;
+        days = 0;
+    } else if (days >= 30) {
+        months += 1;
+        days = 0;
+        if (months >= 12) {
+            years += 1;
+            months = 0;
+        }
+    }
+
     const parts = [];
     if (years > 0) parts.push(years + (years === 1 ? ' Year' : ' Years'));
     if (months > 0) parts.push(months + (months === 1 ? ' Month' : ' Months'));
