@@ -195,7 +195,11 @@ function format_duration(?string $startDate, ?string $endDate): string {
 
         // If raw exclusive diff or inclusive diff reaches 11 months and 28+ days (e.g. 11 months and 30 days), round up to full year
         $diffRaw = $start->diff($end);
-        if (($diffRaw->m === 11 && $diffRaw->d >= 28) || ($months === 11 && $days >= 28)) {
+        if ($months === 11 && $days >= 28) {
+            $years += 1;
+            $months = 0;
+            $days = 0;
+        } elseif ($diffRaw->m === 11 && $diffRaw->d >= 28) {
             $years = max($years, (int)$diffRaw->y + 1);
             $months = 0;
             $days = 0;
@@ -206,6 +210,11 @@ function format_duration(?string $startDate, ?string $endDate): string {
                 $years += 1;
                 $months = 0;
             }
+        }
+
+        if ($months >= 12) {
+            $years += intdiv($months, 12);
+            $months = $months % 12;
         }
 
         $parts = [];

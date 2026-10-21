@@ -240,6 +240,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Document upload validation (Must be strictly under 1 MB)
+    $uploadedDoc = null;
+    if (isset($_FILES['proposal_document']) && !empty($_FILES['proposal_document']['name']) && $_FILES['proposal_document']['error'] !== UPLOAD_ERR_NO_FILE) {
+        $fErr = $_FILES['proposal_document']['error'];
+        $fSize = (int)$_FILES['proposal_document']['size'];
+        $fName = basename($_FILES['proposal_document']['name']);
+
+        if ($fErr !== UPLOAD_ERR_OK) {
+            $error = "Error uploading document: " . ($fErr === UPLOAD_ERR_INI_SIZE || $fErr === UPLOAD_ERR_FORM_SIZE ? "File exceeds server upload size limit." : "Code {$fErr}");
+        } elseif ($fSize > 1048576) {
+            $error = "The uploaded file '{$fName}' exceeds the 1 MB limit (Selected file size: " . round($fSize / 1024, 1) . " KB). Please upload a document strictly under 1 MB.";
+        } elseif ($fSize <= 0) {
+            $error = "The uploaded file '{$fName}' is empty.";
+        } else {
+            $uploadedDoc = [
+                'name' => $fName,
+                'tmp_name' => $_FILES['proposal_document']['tmp_name'],
+                'size' => $fSize,
+                'type' => $_FILES['proposal_document']['type'] ?? 'application/octet-stream'
+            ];
+        }
+    }
+
     if (!$error) {
         try {
             $db->beginTransaction();
@@ -267,6 +290,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $startDate, $endDate, $targetStatus, $submittedAt, $now, $now
                 ]);
                 $proposalId = (int)$db->lastInsertId();
+
+            // Save attached document if provided
+            if ($uploadedDoc) {
+                $uploadDir = __DIR__ . '/../uploads/proposals';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0777, true);
+                }
+                $cleanOrig = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $uploadedDoc['name']);
+                $savedFileName = 'prop_' . $proposalId . '_' . bin2hex(random_bytes(6)) . '_' . $cleanOrig;
+                $targetPath = $uploadDir . '/' . $savedFileName;
+
+                if (move_uploaded_file($uploadedDoc['tmp_name'], $targetPath)) {
+                    $relPath = '/uploads/proposals/' . $savedFileName;
+                    $stmtDoc = $db->prepare("INSERT INTO proposal_documents (proposal_id, file_name, file_path, file_type, file_size, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                    $stmtDoc->execute([
+                        $proposalId,
+                        $uploadedDoc['name'],
+                        $relPath,
+                        $uploadedDoc['type'],
+                        $uploadedDoc['size'],
+                        $userId,
+                        date('Y-m-d H:i:s')
+                    ]);
+                } else {
+                    error_log("Failed to move uploaded proposal document to {$targetPath}");
+                }
+            }
 
             // Save Co-PIs
             $copiNames = $_POST['copi_name'] ?? [];
@@ -871,6 +921,33 @@ include __DIR__ . '/../includes/header.php';
                     <div id="budget_justification_warning" class="text-danger small fw-bold" style="display: none;">
                         <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded! (Max 25 words)
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attached Documents & Supporting Annexures Upload (Max 1 MB) -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-paperclip text-primary fs-5"></i>
+                <h6 class="fw-bold text-dark m-0">Attached Documents &amp; Supporting Annexures</h6>
+            </div>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                <i class="bi bi-file-earmark-arrow-up me-1"></i>Max 1 MB &middot; PDF, DOCX, DOC, Image
+            </span>
+        </div>
+        <div class="card-body">
+            <label for="proposal_document" class="form-label small fw-semibold text-secondary">
+                Upload Proposal Document / Annexure (Optional)
+            </label>
+            <input type="file" name="proposal_document" id="proposal_document" class="form-control" accept=".pdf,.docx,.doc,.txt,.rtf,.odt,.xlsx,.xls,.png,.jpg,.jpeg">
+            <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
+                <div class="form-text extra-small text-muted m-0">
+                    <i class="bi bi-info-circle me-1"></i> Upload project document, methodology details, ethical clearance, or endorsement. <strong>Must be strictly under 1 MB</strong>.
+                </div>
+                <div id="doc_file_warning" class="text-danger small fw-bold" style="display: none;">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i> File exceeds 1 MB limit!
                 </div>
             </div>
         </div>
@@ -1870,6 +1947,31 @@ document.addEventListener('DOMContentLoaded', function() {
                         alert(`Word count limit exceeded for "${fieldId.replace(/_/g, ' ').toUpperCase()}".\nMaximum allowed: ${maxWords} words.\nCurrent word count: ${words} words.\n\nPlease shorten the content before submitting.`);
                         return false;
                     }
+                }
+            }
+        });
+    // G. Document upload size validation (Max 1 MB)
+    const docInput = document.getElementById('proposal_document');
+    if (docInput) {
+        docInput.addEventListener('change', function() {
+            const warning = document.getElementById('doc_file_warning');
+            if (this.files && this.files[0]) {
+                const fileSize = this.files[0].size;
+                const maxBytes = 1048576; // 1 MB
+                if (fileSize > maxBytes) {
+                    const sizeKb = (fileSize / 1024).toFixed(1);
+                    const sizeMb = (fileSize / (1024 * 1024)).toFixed(2);
+                    const displaySize = fileSize >= 1048576 ? sizeMb + ' MB' : sizeKb + ' KB';
+                    if (warning) {
+                        warning.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> File exceeds 1 MB limit! (Selected: ' + displaySize + '). Please choose a file under 1 MB.';
+                        warning.style.display = 'block';
+                    }
+                    alert('The selected document (' + displaySize + ') exceeds the 1 MB size limit.\n\nPlease choose a compressed PDF or document under 1 MB.');
+                    this.value = ''; // Reset input
+                    this.classList.add('is-invalid');
+                } else {
+                    if (warning) warning.style.display = 'none';
+                    this.classList.remove('is-invalid');
                 }
             }
         });
