@@ -507,12 +507,12 @@ if ($cat === 'completed') {
     $builder->addParagraph($proposal['budget_justification']);
 }
 
-// Year-wise Budget Allocation Breakdown (if present)
+// Year-wise Budget Allocation Breakdown (if present or in-house project with budget)
 $yearlyTotal = (float)($proposal['approved_budget'] ?: ($proposal['budget_allocated'] ?: $proposal['proposed_budget']));
 $hasExplicitYearly = !empty($proposal['yearly_budget']) && !(is_string($proposal['yearly_budget']) && in_array(trim($proposal['yearly_budget']), ['', '[]', '{}', 'null']));
-if ($hasExplicitYearly) {
-    $yearlyArr = parse_yearly_budget($proposal['yearly_budget'], $yearlyTotal);
-    if (!empty($yearlyArr)) {
+if ($hasExplicitYearly || ($yearlyTotal > 0 && ($proposal['project_type'] ?? '') !== 'funding_agency')) {
+    $yearlyArr = parse_yearly_budget($proposal['yearly_budget'] ?? null, $yearlyTotal);
+    if (!empty($yearlyArr) && array_sum($yearlyArr) > 0) {
         $builder->addHeading("YEAR-WISE BUDGET ALLOCATION BREAKDOWN");
         $bRows = [];
         foreach ($yearlyArr as $yr => $amt) {

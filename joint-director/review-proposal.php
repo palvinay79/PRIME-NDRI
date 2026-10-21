@@ -487,8 +487,8 @@ include __DIR__ . '/../includes/header.php';
                     $revBudgetTotal = (float)($proposal['approved_budget'] ?: ($proposal['budget_allocated'] ?: $proposal['proposed_budget']));
                     ?>
                     <li class="list-group-item px-0 py-2">
-                        <span class="text-muted d-block mb-1">Year-wise Budget Formulation:</span>
-                        <?= render_yearly_budget_html($proposal['yearly_budget'] ?? null, $revBudgetTotal) ?>
+                        <span class="text-muted d-block mb-1">Year-wise Budget Allocation:</span>
+                        <?= render_yearly_budget_html($proposal['yearly_budget'] ?? null, $revBudgetTotal, false, $proposal['project_type'] ?? null) ?>
                     </li>
                     <li class="list-group-item px-0 py-2">
                         <span class="text-muted d-block mb-1">Project Category & Funding:</span>

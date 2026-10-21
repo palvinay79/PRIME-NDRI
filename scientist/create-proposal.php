@@ -121,12 +121,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sumYearly += $amt;
             }
         }
-        if ($sumYearly > 0) {
-            $budget = $sumYearly;
-        } elseif ($budget > 0 && empty($yearlyBudgetMap)) {
-            $yearlyBudgetMap = ['Year 1' => $budget];
+
+        // Check if single budget was passed as fallback
+        if ($budget <= 0 && $singleBudget > 0) {
+            $budget = $singleBudget;
         }
-        $yearlyBudgetJson = !empty($yearlyBudgetMap) ? json_encode($yearlyBudgetMap) : null;
+
+        if ($sumYearly > 0) {
+            // User provided valid positive yearly breakdown amounts
+            $budget = $sumYearly;
+        } elseif ($budget > 0) {
+            // User entered total proposed budget, but yearly amounts were 0 or blank.
+            // Distribute total proposed budget across the project tenure years!
+            $yearKeys = !empty($yearlyBudgetMap) ? array_keys($yearlyBudgetMap) : [];
+            if (empty($yearKeys)) {
+                $numY = max(1, $tenureYears ?? 1);
+                for ($y = 1; $y <= $numY; $y++) {
+                    $yearKeys[] = "Year {$y}";
+                }
+            }
+            $numY = count($yearKeys);
+            $base = round($budget / $numY, 2);
+            $runningSum = 0;
+            $yearlyBudgetMap = [];
+            foreach ($yearKeys as $kIdx => $k) {
+                if ($kIdx === $numY - 1) {
+                    $yearlyBudgetMap[$k] = round($budget - $runningSum, 2);
+                } else {
+                    $yearlyBudgetMap[$k] = $base;
+                    $runningSum += $base;
+                }
+            }
+        }
+        $yearlyBudgetJson = (!empty($yearlyBudgetMap) && array_sum($yearlyBudgetMap) > 0) ? json_encode($yearlyBudgetMap) : null;
     }
 
     $budgetJustification = sanitize($_POST['budget_justification'] ?? '');
