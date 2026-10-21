@@ -179,15 +179,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('/joint-director/users.php');
     }
 
-    // 5. Delete User (Hard Delete permanently, cleaning up foreign key references)
+    // 5. Delete User (Hard Delete permanently from database)
     if ($action === 'delete_user') {
         $userId = (int)($_POST['user_id'] ?? 0);
         if ($userId <= 0) {
-            flash('danger', 'Invalid user.');
+            flash('danger', 'Invalid user ID.');
         } elseif ($userId === $currentUserId) {
-            flash('danger', 'You cannot delete your own account.');
+            flash('danger', 'You cannot delete your own administrative account.');
         } else {
-            $stmt = $db->prepare("SELECT name, email FROM users WHERE id = ?");
+            $stmt = $db->prepare("SELECT name, email, role_id FROM users WHERE id = ?");
             $stmt->execute([$userId]);
             $u = $stmt->fetch();
 
@@ -196,24 +196,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $db->beginTransaction();
                     $uEmail = trim($u['email'] ?? '');
 
-                    // Clean references so foreign key constraints allow permanent deletion:
+                    // 1. Clean references where user is a participant or reviewer
                     if (!empty($uEmail)) {
                         $db->prepare("DELETE FROM proposal_co_pis WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))")->execute([$uEmail]);
                     }
                     $db->prepare("DELETE FROM proposal_comments WHERE user_id = ?")->execute([$userId]);
                     $db->prepare("DELETE FROM progress_report_comments WHERE user_id = ?")->execute([$userId]);
+                    $db->prepare("UPDATE progress_reports SET reviewed_by = NULL WHERE reviewed_by = ?")->execute([$userId]);
                     $db->prepare("DELETE FROM irc_decisions WHERE decided_by = ?")->execute([$userId]);
                     $db->prepare("DELETE FROM audit_logs WHERE user_id = ?")->execute([$userId]);
+                    $db->prepare("DELETE FROM audit_logs WHERE entity_type = 'users' AND entity_id = ?")->execute([$userId]);
                     $db->prepare("DELETE FROM proposal_documents WHERE uploaded_by = ?")->execute([$userId]);
                     $db->prepare("DELETE FROM proposal_status_history WHERE action_by = ?")->execute([$userId]);
                     $db->prepare("UPDATE irc_meetings SET created_by = ? WHERE created_by = ?")->execute([$currentUserId, $userId]);
 
-                    // Clean proposals submitted by this user
+                    // 2. Remove projects and related reports owned by this user
+                    $stmtPrjs = $db->prepare("SELECT id FROM projects WHERE scientist_id = ?");
+                    $stmtPrjs->execute([$userId]);
+                    $prjIds = $stmtPrjs->fetchAll(PDO::FETCH_COLUMN);
+                    foreach ($prjIds as $pjId) {
+                        $pjId = (int)$pjId;
+                        $db->prepare("DELETE FROM progress_report_comments WHERE progress_report_id IN (SELECT id FROM progress_reports WHERE project_id = ?)")->execute([$pjId]);
+                        $db->prepare("DELETE FROM progress_reports WHERE project_id = ?")->execute([$pjId]);
+                        $db->prepare("DELETE FROM completion_reports WHERE project_id = ?")->execute([$pjId]);
+                        $db->prepare("DELETE FROM projects WHERE id = ?")->execute([$pjId]);
+                    }
+
+                    // 3. Remove reports submitted by this user directly
+                    $db->prepare("DELETE FROM progress_report_comments WHERE progress_report_id IN (SELECT id FROM progress_reports WHERE submitted_by = ?)")->execute([$userId]);
+                    $db->prepare("DELETE FROM progress_reports WHERE submitted_by = ?")->execute([$userId]);
+                    $db->prepare("DELETE FROM completion_reports WHERE submitted_by = ?")->execute([$userId]);
+
+                    // 4. Remove proposals submitted by this user and all linked items
                     $stmtProps = $db->prepare("SELECT id FROM proposals WHERE scientist_id = ?");
                     $stmtProps->execute([$userId]);
                     $propIds = $stmtProps->fetchAll(PDO::FETCH_COLUMN);
                     foreach ($propIds as $pId) {
                         $pId = (int)$pId;
+                        // Clean any projects linked to this proposal
+                        $subPrjs = $db->prepare("SELECT id FROM projects WHERE proposal_id = ?");
+                        $subPrjs->execute([$pId]);
+                        $subPrjIds = $subPrjs->fetchAll(PDO::FETCH_COLUMN);
+                        foreach ($subPrjIds as $spId) {
+                            $spId = (int)$spId;
+                            $db->prepare("DELETE FROM progress_report_comments WHERE progress_report_id IN (SELECT id FROM progress_reports WHERE project_id = ?)")->execute([$spId]);
+                            $db->prepare("DELETE FROM progress_reports WHERE project_id = ?")->execute([$spId]);
+                            $db->prepare("DELETE FROM completion_reports WHERE project_id = ?")->execute([$spId]);
+                            $db->prepare("DELETE FROM projects WHERE id = ?")->execute([$spId]);
+                        }
                         $db->prepare("DELETE FROM proposal_documents WHERE proposal_id = ?")->execute([$pId]);
                         $db->prepare("DELETE FROM proposal_comments WHERE proposal_id = ?")->execute([$pId]);
                         $db->prepare("DELETE FROM proposal_co_pis WHERE proposal_id = ?")->execute([$pId]);
@@ -222,37 +252,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $db->prepare("DELETE FROM proposals WHERE id = ?")->execute([$pId]);
                     }
 
-                    // Clean projects submitted by this user
-                    $stmtPrjs = $db->prepare("SELECT id FROM projects WHERE scientist_id = ?");
-                    $stmtPrjs->execute([$userId]);
-                    $prjIds = $stmtPrjs->fetchAll(PDO::FETCH_COLUMN);
-                    foreach ($prjIds as $pjId) {
-                        $pjId = (int)$pjId;
-                        $db->prepare("DELETE FROM progress_reports WHERE project_id = ?")->execute([$pjId]);
-                        $db->prepare("DELETE FROM project_completion_reports WHERE project_id = ?")->execute([$pjId]);
-                        $db->prepare("DELETE FROM projects WHERE id = ?")->execute([$pjId]);
-                    }
-
-                    // Progress reports or completion reports submitted by user
-                    $db->prepare("DELETE FROM progress_reports WHERE submitted_by = ?")->execute([$userId]);
-                    $db->prepare("DELETE FROM project_completion_reports WHERE submitted_by = ?")->execute([$userId]);
-
-                    // Now hard-delete the user record
+                    // 5. Hard delete the user record permanently
                     $delStmt = $db->prepare("DELETE FROM users WHERE id = ?");
                     $delStmt->execute([$userId]);
                     $db->commit();
 
-                    log_audit($currentUserId, 'USER_DELETED', 'users', $userId, "Deleted user {$u['name']} (ID: {$userId})");
-                    flash('success', "User '{$u['name']}' has been permanently removed.");
+                    log_audit($currentUserId, 'USER_DELETED', 'users', $userId, "Permanently deleted user {$u['name']} ({$u['email']})");
+                    flash('success', "User '{$u['name']}' has been permanently deleted from the database.");
                 } catch (Exception $eDel) {
                     if ($db->inTransaction()) {
                         $db->rollBack();
                     }
-                    error_log("Failed deleting user {$userId}: " . $eDel->getMessage());
-                    // Fallback: if hard delete was blocked by a complex constraint, deactivate gracefully
-                    $db->prepare("UPDATE users SET status = 'inactive' WHERE id = ?")->execute([$userId]);
-                    log_audit($currentUserId, 'USER_DEACTIVATED_INSTEAD_OF_DELETE', 'users', $userId, "User {$u['name']} deactivated instead of delete: " . $eDel->getMessage());
-                    flash('warning', "User '{$u['name']}' has linked institutional archive records, so the account has been deactivated instead.");
+                    error_log("Failed permanently deleting user {$userId}: " . $eDel->getMessage());
+                    flash('danger', "Could not permanently delete user '{$u['name']}': " . e($eDel->getMessage()));
                 }
             } else {
                 flash('warning', "User could not be found or was already removed.");
@@ -385,9 +397,13 @@ $pendingCount = count($pendingUsers);
 $summaryCounts = [
     'total' => 0,
     'scientists' => 0,
+    'scientists_active' => 0,
     'hods' => 0,
+    'hods_active' => 0,
     'directors' => 0,
+    'directors_active' => 0,
     'active' => 0,
+    'inactive' => 0,
     'pending' => $pendingCount
 ];
 $stmt = $db->query("SELECT role_id, status, COUNT(*) as cnt FROM users GROUP BY role_id, status");
@@ -396,10 +412,20 @@ foreach ($stmt->fetchAll() as $row) {
     $summaryCounts['total'] += $cnt;
     if ($row['status'] === 'active') {
         $summaryCounts['active'] += $cnt;
+    } elseif ($row['status'] === 'inactive') {
+        $summaryCounts['inactive'] += $cnt;
     }
-    if ((int)$row['role_id'] === ROLE_SCIENTIST) $summaryCounts['scientists'] += $cnt;
-    elseif ((int)$row['role_id'] === ROLE_HOD) $summaryCounts['hods'] += $cnt;
-    elseif ((int)$row['role_id'] === ROLE_JOINT_DIRECTOR) $summaryCounts['directors'] += $cnt;
+
+    if ((int)$row['role_id'] === ROLE_SCIENTIST) {
+        $summaryCounts['scientists'] += $cnt;
+        if ($row['status'] === 'active') $summaryCounts['scientists_active'] += $cnt;
+    } elseif ((int)$row['role_id'] === ROLE_HOD) {
+        $summaryCounts['hods'] += $cnt;
+        if ($row['status'] === 'active') $summaryCounts['hods_active'] += $cnt;
+    } elseif ((int)$row['role_id'] === ROLE_JOINT_DIRECTOR) {
+        $summaryCounts['directors'] += $cnt;
+        if ($row['status'] === 'active') $summaryCounts['directors_active'] += $cnt;
+    }
 }
 
 // Fetch all departments for select dropdowns
@@ -430,7 +456,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="stat-card-accent bg-primary"></div>
             <span class="text-muted small text-uppercase fw-semibold">Total Accounts</span>
             <div class="fs-3 fw-bold text-dark mt-1"><?= $summaryCounts['total'] ?></div>
-            <small class="text-success"><i class="bi bi-check-circle-fill me-1"></i><?= $summaryCounts['active'] ?> Active</small>
+            <small class="text-success"><i class="bi bi-check-circle-fill me-1"></i><?= $summaryCounts['active'] ?> Active<?= ($summaryCounts['inactive'] > 0) ? ' &middot; ' . $summaryCounts['inactive'] . ' Inactive' : '' ?></small>
         </div>
     </div>
     <?php if ($pendingCount > 0): ?>
@@ -448,7 +474,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="stat-card-accent bg-info"></div>
             <span class="text-muted small text-uppercase fw-semibold">Scientists (PI / Co-PI)</span>
             <div class="fs-3 fw-bold text-info-emphasis mt-1"><?= $summaryCounts['scientists'] ?></div>
-            <small class="text-muted">Research Investigators</small>
+            <small class="text-muted"><?= $summaryCounts['scientists_active'] ?> Active<?= ($summaryCounts['scientists'] > $summaryCounts['scientists_active']) ? ' &middot; ' . ($summaryCounts['scientists'] - $summaryCounts['scientists_active']) . ' Inactive' : '' ?></small>
         </div>
     </div>
     <div class="col-6 col-md-<?php echo ($pendingCount > 0) ? '2' : '3'; ?>">
@@ -456,7 +482,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="stat-card-accent bg-success"></div>
             <span class="text-muted small text-uppercase fw-semibold">Heads of Dept</span>
             <div class="fs-3 fw-bold text-success mt-1"><?= $summaryCounts['hods'] ?></div>
-            <small class="text-muted">Department Gatekeepers</small>
+            <small class="text-muted"><?= $summaryCounts['hods_active'] ?> Active<?= ($summaryCounts['hods'] > $summaryCounts['hods_active']) ? ' &middot; ' . ($summaryCounts['hods'] - $summaryCounts['hods_active']) . ' Inactive' : '' ?></small>
         </div>
     </div>
     <div class="col-6 col-md-<?php echo ($pendingCount > 0) ? '2' : '3'; ?>">
@@ -464,7 +490,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="stat-card-accent bg-dark"></div>
             <span class="text-muted small text-uppercase fw-semibold">Directorate</span>
             <div class="fs-3 fw-bold text-dark mt-1"><?= $summaryCounts['directors'] ?></div>
-            <small class="text-muted">Executive Oversight</small>
+            <small class="text-muted"><?= $summaryCounts['directors_active'] ?> Active<?= ($summaryCounts['directors'] > $summaryCounts['directors_active']) ? ' &middot; ' . ($summaryCounts['directors'] - $summaryCounts['directors_active']) . ' Inactive' : '' ?></small>
         </div>
     </div>
 </div>
@@ -834,12 +860,12 @@ include __DIR__ . '/../includes/header.php';
                                                 <?php endif; ?>
                                             </form>
 
-                                            <!-- Delete User -->
-                                            <form method="POST" action="<?= url("/joint-director/users.php") ?>" class="d-inline" onsubmit="return confirm('Are you sure you want to delete/deactivate <?= e(addslashes($u['name'])) ?>?');">
+                                            <!-- Delete User (Permanent DB Deletion) -->
+                                            <form method="POST" action="<?= url("/joint-director/users.php") ?>" class="d-inline" onsubmit="return confirm('Are you sure you want to PERMANENTLY delete user <?= e(addslashes($u['name'])) ?> from the database? This cannot be undone.');">
                                                 <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
                                                 <input type="hidden" name="action" value="delete_user">
                                                 <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
-                                                <button type="submit" class="btn btn-outline-danger" title="Delete User">
+                                                <button type="submit" class="btn btn-outline-danger" title="Permanently Delete User from Database">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
                                             </form>
