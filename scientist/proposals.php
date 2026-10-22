@@ -26,42 +26,19 @@ if (!in_array($categoryFilter, ['all', 'new', 'ongoing', 'completed'])) {
 
 $userEmail = trim($currentUser['email'] ?? '');
 $userName = trim($currentUser['name'] ?? '');
-$normUserName = normalize_person_name($userName);
 
-$roleFilter = sanitize($_GET['role'] ?? 'all');
-if (!in_array($roleFilter, ['all', 'lead', 'copi'])) {
-    $roleFilter = 'all';
-}
-
-$copiSubquery = "p.id IN (
-    SELECT pcp.proposal_id FROM proposal_co_pis pcp 
-    WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
-       OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
-       OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
-       OR (LOWER(TRIM(pcp.co_pi_name)) LIKE ?)
-)";
-$copiSubqueryParams = [$userEmail, $userName, $normUserName, '%' . $normUserName . '%'];
-
-$sql = "SELECT p.*, d.department_name, d.department_code,
-               u.name as lead_pi_name, u.designation as lead_pi_designation
+$sql = "SELECT p.*, d.department_name, d.department_code
         FROM proposals p
         LEFT JOIN departments d ON p.department_id = d.id
-        LEFT JOIN users u ON p.scientist_id = u.id
-        WHERE 1=1";
-
-if ($roleFilter === 'lead') {
-    $sql .= " AND p.scientist_id = ?";
-    $params = [$userId];
-} elseif ($roleFilter === 'copi') {
-    $sql .= " AND p.scientist_id != ? AND (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})";
-    $params = array_merge([$userId], $copiSubqueryParams);
-} else {
-    $sql .= " AND (
-        p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
-    )";
-    $params = array_merge([$userId], $copiSubqueryParams);
-}
+        WHERE (
+            p.scientist_id = ? OR 
+            (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+                SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+                WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+                   OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+            ))
+        )";
+$params = [$userId, $userEmail, $userName];
 
 if ($categoryFilter === 'new') {
     $sql .= " AND (p.proposal_category = 'new' OR p.proposal_category IS NULL OR p.proposal_category = '')";
@@ -72,9 +49,8 @@ if ($categoryFilter === 'new') {
 }
 
 if (!empty($search)) {
-    $sql .= " AND (p.title LIKE ? OR p.proposal_number LIKE ? OR p.institute_priority_area LIKE ? OR p.project_number LIKE ? OR p.progress_report_period LIKE ? OR d.department_name LIKE ? OR d.department_code LIKE ? OR u.name LIKE ?)";
+    $sql .= " AND (p.title LIKE ? OR p.proposal_number LIKE ? OR p.institute_priority_area LIKE ? OR p.project_number LIKE ? OR p.progress_report_period LIKE ? OR d.department_name LIKE ? OR d.department_code LIKE ?)";
     $term = "%{$search}%";
-    $params[] = $term;
     $params[] = $term;
     $params[] = $term;
     $params[] = $term;
@@ -105,53 +81,56 @@ $countStmt = $db->prepare("
     SELECT COUNT(DISTINCT p.id) FROM proposals p 
     WHERE (
         p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
     )
 ");
-$countStmt->execute(array_merge([$userId], $copiSubqueryParams));
+$countStmt->execute([$userId, $userEmail, $userName]);
 $countAll = (int)$countStmt->fetchColumn();
-
-// Lead PI count
-$countLeadStmt = $db->prepare("SELECT COUNT(DISTINCT id) FROM proposals WHERE scientist_id = ?");
-$countLeadStmt->execute([$userId]);
-$countLead = (int)$countLeadStmt->fetchColumn();
-
-// Co-PI count (submitted/pending/approved non-draft)
-$countCopiStmt = $db->prepare("
-    SELECT COUNT(DISTINCT p.id) FROM proposals p 
-    WHERE p.scientist_id != ? AND LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery}
-");
-$countCopiStmt->execute(array_merge([$userId], $copiSubqueryParams));
-$countCopi = (int)$countCopiStmt->fetchColumn();
 
 $countNewStmt = $db->prepare("
     SELECT COUNT(DISTINCT p.id) FROM proposals p 
     WHERE (
         p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
     ) AND (p.proposal_category = 'new' OR p.proposal_category IS NULL OR p.proposal_category = '')
 ");
-$countNewStmt->execute(array_merge([$userId], $copiSubqueryParams));
+$countNewStmt->execute([$userId, $userEmail, $userName]);
 $countNew = (int)$countNewStmt->fetchColumn();
 
 $countOngoingStmt = $db->prepare("
     SELECT COUNT(DISTINCT p.id) FROM proposals p 
     WHERE (
         p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
     ) AND p.proposal_category = 'ongoing'
 ");
-$countOngoingStmt->execute(array_merge([$userId], $copiSubqueryParams));
+$countOngoingStmt->execute([$userId, $userEmail, $userName]);
 $countOngoing = (int)$countOngoingStmt->fetchColumn();
 
 $countCompletedStmt = $db->prepare("
     SELECT COUNT(DISTINCT p.id) FROM proposals p 
     WHERE (
         p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
     ) AND p.proposal_category = 'completed'
 ");
-$countCompletedStmt->execute(array_merge([$userId], $copiSubqueryParams));
+$countCompletedStmt->execute([$userId, $userEmail, $userName]);
 $countCompleted = (int)$countCompletedStmt->fetchColumn();
 
 include __DIR__ . '/../includes/header.php';
@@ -160,7 +139,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
     <div>
         <h3 class="fw-bold mb-1 text-dark"><?= $isHod ? 'My Research Submissions' : 'My Research Proposals' ?></h3>
-        <p class="text-muted small mb-0"><?= $isHod ? 'Track your personal research submissions and co-investigator proposals forwarded for review' : 'Track lifecycle stage, review feedback, and view proposals where you are Lead PI or Co-PI' ?></p>
+        <p class="text-muted small mb-0"><?= $isHod ? 'Track your personal research submissions forwarded directly to the Joint Director for approval' : 'Track lifecycle stage, review feedback, and submit new, ongoing, or completion projects' ?></p>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a href="<?= url("/scientist/create-proposal.php") ?>" class="btn btn-primary shadow-sm" style="background-color: #1a365d; border-color: #1a365d;">
@@ -175,68 +154,34 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<!-- Role View Selector & Category Tabs -->
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-    <!-- Category Tabs -->
-    <ul class="nav nav-pills p-1 bg-white border rounded shadow-xs m-0" style="max-width: 650px;">
-        <li class="nav-item">
-            <a class="nav-link <?= $categoryFilter === 'all' ? 'active fw-bold' : 'text-secondary fw-semibold' ?> py-2 px-3" href="<?= url("/scientist/proposals.php?category=all&role=" . urlencode($roleFilter) . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>">
-                All Categories (<?= $countAll ?>)
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link <?= $categoryFilter === 'new' ? 'active fw-bold' : 'text-secondary fw-semibold' ?> py-2 px-3" href="<?= url("/scientist/proposals.php?category=new&role=" . urlencode($roleFilter) . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>">
-                <i class="bi bi-file-earmark-plus me-1"></i> New (<?= $countNew ?>)
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link <?= $categoryFilter === 'ongoing' ? 'active fw-bold' : 'text-secondary fw-semibold' ?> py-2 px-3" href="<?= url("/scientist/proposals.php?category=ongoing&role=" . urlencode($roleFilter) . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>">
-                <i class="bi bi-arrow-repeat me-1"></i> On Going (<?= $countOngoing ?>)
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link <?= $categoryFilter === 'completed' ? 'active fw-bold' : 'text-secondary fw-semibold' ?> py-2 px-3" href="<?= url("/scientist/proposals.php?category=completed&role=" . urlencode($roleFilter) . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>">
-                <i class="bi bi-check2-circle me-1"></i> Completion (<?= $countCompleted ?>)
-            </a>
-        </li>
-    </ul>
-
-    <!-- Role Filter Pills (All / Lead PI / Co-PI) -->
-    <div class="btn-group btn-group-sm p-1 bg-white border rounded shadow-xs" role="group">
-        <a href="<?= url("/scientist/proposals.php?role=all" . ($categoryFilter !== 'all' ? "&category=" . urlencode($categoryFilter) : "") . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>" class="btn <?= $roleFilter === 'all' ? 'btn-primary active fw-bold' : 'btn-light text-secondary' ?>" title="Show all proposals where you are Lead PI or Co-PI">
-            <i class="bi bi-collection me-1"></i> All Roles (<?= $countAll ?>)
+<!-- Proposal Category Tabs -->
+<ul class="nav nav-pills mb-4 p-1 bg-white border rounded shadow-xs" style="max-width: 780px;">
+    <li class="nav-item flex-fill text-center">
+        <a class="nav-link <?= $categoryFilter === 'all' ? 'active fw-bold' : 'text-secondary fw-semibold' ?> py-2" href="<?= url("/scientist/proposals.php?category=all" . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>">
+            All (<?= $countAll ?>)
         </a>
-        <a href="<?= url("/scientist/proposals.php?role=lead" . ($categoryFilter !== 'all' ? "&category=" . urlencode($categoryFilter) : "") . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>" class="btn <?= $roleFilter === 'lead' ? 'btn-primary active fw-bold' : 'btn-light text-secondary' ?>" title="Proposals where you are Principal Investigator">
-            <i class="bi bi-person-fill me-1"></i> Lead PI (<?= $countLead ?>)
+    </li>
+    <li class="nav-item flex-fill text-center">
+        <a class="nav-link <?= $categoryFilter === 'new' ? 'active fw-bold' : 'text-secondary fw-semibold' ?> py-2" href="<?= url("/scientist/proposals.php?category=new" . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>">
+            <i class="bi bi-file-earmark-plus me-1"></i> New (<?= $countNew ?>)
         </a>
-        <a href="<?= url("/scientist/proposals.php?role=copi" . ($categoryFilter !== 'all' ? "&category=" . urlencode($categoryFilter) : "") . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>" class="btn <?= $roleFilter === 'copi' ? 'btn-primary active fw-bold text-white' : 'btn-light text-secondary' ?>" style="<?= $roleFilter === 'copi' ? 'background-color: #6f42c1 !important; border-color: #6f42c1 !important;' : '' ?>" title="Proposals where you are Co-Investigator (View Only)">
-            <i class="bi bi-people-fill me-1"></i> Co-PI Submissions (<?= $countCopi ?>)
+    </li>
+    <li class="nav-item flex-fill text-center">
+        <a class="nav-link <?= $categoryFilter === 'ongoing' ? 'active fw-bold' : 'text-secondary fw-semibold' ?> py-2" href="<?= url("/scientist/proposals.php?category=ongoing" . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>">
+            <i class="bi bi-arrow-repeat me-1"></i> On Going (<?= $countOngoing ?>)
         </a>
-    </div>
-</div>
-
-<?php if ($roleFilter === 'copi'): ?>
-    <div class="alert alert-info border shadow-xs d-flex align-items-center justify-content-between mb-4 p-3" style="background-color: #f3e8ff; border-color: #d8b4fe !important; color: #581c87;">
-        <div class="d-flex align-items-center gap-2">
-            <i class="bi bi-people-fill fs-4 text-purple"></i>
-            <div>
-                <strong>Co-Principal Investigator Submissions (View Only Mode):</strong>
-                <div class="small text-muted mt-1" style="color: #6b21a8 !important;">
-                    Showing all research proposals submitted to HOD, pending review, with Joint Director, or approved where you are listed as a <strong>Co-PI</strong>. As a Co-PI, you have view access to monitor status and inspect research designs.
-                </div>
-            </div>
-        </div>
-        <a href="<?= url("/scientist/proposals.php?role=all" . ($categoryFilter !== 'all' ? "&category=" . urlencode($categoryFilter) : "")) ?>" class="btn btn-sm btn-outline-secondary bg-white">
-            Show All Roles
+    </li>
+    <li class="nav-item flex-fill text-center">
+        <a class="nav-link <?= $categoryFilter === 'completed' ? 'active fw-bold' : 'text-secondary fw-semibold' ?> py-2" href="<?= url("/scientist/proposals.php?category=completed" . (!empty($statusFilter) ? "&status=" . urlencode($statusFilter) : "") . (!empty($search) ? "&q=" . urlencode($search) : "")) ?>">
+            <i class="bi bi-check2-circle me-1"></i> Completion (<?= $countCompleted ?>)
         </a>
-    </div>
-<?php endif; ?>
+    </li>
+</ul>
 
 <!-- Search & Filter Card -->
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body">
         <form method="GET" action="<?= url("/scientist/proposals.php") ?>" class="row g-2 align-items-center" id="filterForm">
-            <input type="hidden" name="role" value="<?= e($roleFilter) ?>">
             <div class="col-md-4">
                 <div class="input-group">
                     <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
@@ -308,22 +253,15 @@ include __DIR__ . '/../includes/header.php';
                         $cat = $prop['proposal_category'] ?? 'new';
                         $isOngoing = ($cat === 'ongoing');
                         $isCompleted = ($cat === 'completed');
-                        $isCoPi = ((int)$prop['scientist_id'] !== (int)$userId);
                         $canEdit = can_edit_proposal($prop);
                         $canDelete = can_delete_proposal($prop);
                         ?>
-                        <tr class="proposal-row <?= $isCoPi ? 'table-light' : '' ?>" data-title="<?= strtolower(e($prop['title'])) ?>" data-number="<?= strtolower(e($prop['proposal_number'])) ?>" data-status="<?= e($prop['current_status']) ?>" data-category="<?= e($cat) ?>">
+                        <tr class="proposal-row" data-title="<?= strtolower(e($prop['title'])) ?>" data-number="<?= strtolower(e($prop['proposal_number'])) ?>" data-status="<?= e($prop['current_status']) ?>" data-category="<?= e($cat) ?>">
                             <td class="fw-semibold font-monospace small">
                                 <a href="<?= url("/scientist/proposal-details.php?id=" . ($prop['id']) . "") ?>" class="text-decoration-none">
                                     <?= e($prop['proposal_number']) ?>
                                 </a>
-                                <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
-                                    <?php if ($isCoPi): ?>
-                                        <span class="badge text-white font-monospace shadow-xs px-2 py-1" style="background-color: #6f42c1 !important; font-size: 0.72rem;">
-                                            <i class="bi bi-people-fill me-1"></i>Co-PI
-                                        </span>
-                                    <?php endif; ?>
-
+                                <div class="mt-1 d-flex flex-wrap gap-1">
                                     <?= render_proposal_category_badge($cat) ?>
 
                                     <?php if (($prop['project_type'] ?? '') === 'funding_agency'): ?>
@@ -354,19 +292,6 @@ include __DIR__ . '/../includes/header.php';
                                         </span>
                                     <?php endif; ?>
                                 </div>
-                                <?php if ($isCoPi): ?>
-                                    <div class="mt-2 d-flex flex-wrap align-items-center gap-1">
-                                        <span class="badge border extra-small" style="background-color: #f3e8ff; color: #581c87; border-color: #d8b4fe !important;">
-                                            <i class="bi bi-person-badge-fill me-1"></i>Lead PI: <strong><?= e($prop['lead_pi_name'] ?? 'Principal Investigator') ?></strong>
-                                            <?php if (!empty($prop['lead_pi_designation'])): ?>
-                                                (<?= e($prop['lead_pi_designation']) ?>)
-                                            <?php endif; ?>
-                                        </span>
-                                        <span class="badge bg-light text-secondary border extra-small">
-                                            <i class="bi bi-lock-fill me-1"></i>View Only Mode
-                                        </span>
-                                    </div>
-                                <?php endif; ?>
                             </td>
                             <td class="small text-muted">
                                 <span class="badge bg-light text-dark border" title="<?= e(get_priority_area_title($prop['institute_priority_area'])) ?>">Program <?= e($prop['institute_priority_area'] ?: 'A') ?></span>
@@ -387,12 +312,7 @@ include __DIR__ . '/../includes/header.php';
                             <td class="small text-muted"><?= format_date($prop['created_at']) ?></td>
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
-                                    <?php if ($isCoPi): ?>
-                                        <span class="badge bg-light text-secondary border me-1 align-self-center py-1 px-2" style="font-size: 0.7rem;" title="Co-PI View Only Mode">
-                                            <i class="bi bi-eye me-1"></i>View Only
-                                        </span>
-                                    <?php endif; ?>
-                                    <a href="<?= url("/scientist/proposal-details.php?id=" . ($prop['id']) . "") ?>" class="btn btn-outline-secondary" title="<?= $isCoPi ? 'View Proposal Details (Co-PI Mode)' : 'View Full Proposal' ?>">
+                                    <a href="<?= url("/scientist/proposal-details.php?id=" . ($prop['id']) . "") ?>" class="btn btn-outline-secondary" title="View Full Proposal">
                                         <i class="bi bi-eye"></i>
                                     </a>
                                     <?php if ($canEdit): 

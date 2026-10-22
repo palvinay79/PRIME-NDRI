@@ -778,38 +778,6 @@ function ensure_schema_compatibility(PDO $pdo): void {
                 WHERE (funding_agency_type IS NULL OR funding_agency_type = '') 
                   AND proposal_category IN ('ongoing', 'completed')
             ");
-
-            // Repair any proposals where proposed_budget > 0 but yearly_budget is null, empty, or all zeros
-            $unallocatedProps = $pdo->query("SELECT id, proposed_budget, approved_budget, proposed_start_date, proposed_end_date, yearly_budget, project_type FROM proposals WHERE (proposed_budget > 0 OR approved_budget > 0)")->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($unallocatedProps as $uProp) {
-                $totalBudg = (float)($uProp['approved_budget'] ?: $uProp['proposed_budget']);
-                $yb = $uProp['yearly_budget'];
-                $decoded = !empty($yb) ? json_decode($yb, true) : null;
-                $needsRepair = empty($yb) || !is_array($decoded) || array_sum($decoded) <= 0;
-                if ($needsRepair && ($uProp['project_type'] ?? '') !== 'funding_agency') {
-                    $tenureYears = 1;
-                    if (!empty($uProp['proposed_start_date']) && !empty($uProp['proposed_end_date'])) {
-                        try {
-                            $d1 = new DateTime($uProp['proposed_start_date']);
-                            $d2 = new DateTime($uProp['proposed_end_date']);
-                            $diff = $d1->diff($d2);
-                            $tenureYears = max(1, $diff->y + (($diff->m > 0 || $diff->d > 0) ? 1 : 0));
-                        } catch (Exception $eDate) {}
-                    }
-                    $base = round($totalBudg / $tenureYears, 2);
-                    $sum = 0;
-                    $repairedMap = [];
-                    for ($y = 1; $y <= $tenureYears; $y++) {
-                        if ($y === $tenureYears) {
-                            $repairedMap["Year {$y}"] = round($totalBudg - $sum, 2);
-                        } else {
-                            $repairedMap["Year {$y}"] = $base;
-                            $sum += $base;
-                        }
-                    }
-                    $pdo->prepare("UPDATE proposals SET yearly_budget = ? WHERE id = ?")->execute([json_encode($repairedMap), $uProp['id']]);
-                }
-            }
         } catch (Exception $eYb) {}
 
         // 11. Ensure Admin and Core User credentials are valid and can log in smoothly across all environments

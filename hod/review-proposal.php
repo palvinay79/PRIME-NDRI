@@ -231,15 +231,42 @@ include __DIR__ . '/../includes/header.php';
 <!-- Scientist Resubmission Remarks / Response to Feedback Banner -->
 <?= render_scientist_remarks_box($proposal, $scientistRemarkData) ?>
 
-<!-- HOD Review Guidance & Jump to Decision Banner -->
-<div class="alert alert-light border border-warning-subtle shadow-sm d-flex flex-wrap justify-content-between align-items-center py-2 px-3 mb-4 gap-2" style="background-color: #fffdf5;">
-    <div class="d-flex align-items-center gap-2">
-        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>HOD Review Pending</span>
-        <span class="text-dark small">Please review the proposal content, objectives, and budget below. The <strong>HoD Comments &amp; Review Decision</strong> section is located at the end of the document.</span>
+<!-- Review Decision Box at Top for Fast Action -->
+<div class="card shadow-sm border-0 mb-4" style="border-top: 4px solid #f59e0b !important;">
+    <div class="card-header bg-white py-3">
+        <h5 class="fw-bold text-dark m-0">
+            <i class="bi bi-pen-fill text-warning me-2"></i>
+            <?php if (($proposal['proposal_category'] ?? '') === 'ongoing'): ?>
+                Record HOD Progress Report Endorsement Decision
+            <?php elseif (($proposal['proposal_category'] ?? '') === 'completed'): ?>
+                Record HOD Completion Report Endorsement Decision
+            <?php else: ?>
+                Record HOD Review Decision
+            <?php endif; ?>
+        </h5>
     </div>
-    <a href="#hod-review-section" class="btn btn-warning btn-sm fw-semibold text-dark shadow-sm">
-        <i class="bi bi-arrow-down-circle me-1"></i> Jump to HoD Comments &amp; Decision
-    </a>
+    <div class="card-body p-4">
+        <form method="POST" action="<?= url("/hod/review-proposal.php?id=" . ($id) . "") ?>">
+            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+
+            <div class="mb-3">
+                <label for="comments" class="form-label small fw-semibold text-secondary">
+                    Reviewer's Comments / Feedback / Endorsement Remarks:
+                </label>
+                <textarea id="comments" name="comments" class="form-control" rows="4" placeholder="Mandatory if returning for revisions. Enter technical observations, gap critiques, or budget recommendations..."></textarea>
+                <small class="text-muted">These comments will be permanently recorded in the proposal timeline and visible to the Scientist and Joint Director.</small>
+            </div>
+
+            <div class="d-flex flex-wrap gap-3 justify-content-end align-items-center pt-3 border-top">
+                <button type="submit" name="decision" value="return" class="btn btn-outline-danger fw-semibold" data-confirm="Are you sure you want to RETURN this submission to the Scientist for revision?">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision
+                </button>
+                <button type="submit" name="decision" value="forward" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Are you sure you want to ENDORSE and FORWARD this submission to the Joint Director?">
+                    <i class="bi bi-check2-circle me-1"></i> Endorse & Forward to Joint Director
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- Proposal Details Summary -->
@@ -595,8 +622,8 @@ include __DIR__ . '/../includes/header.php';
                     $revBudgetTotal = (float)($proposal['approved_budget'] ?: ($proposal['budget_allocated'] ?: $proposal['proposed_budget']));
                     ?>
                     <li class="list-group-item px-0 py-2">
-                        <span class="text-muted d-block mb-1">Year-wise Budget Allocation:</span>
-                        <?= render_yearly_budget_html($proposal['yearly_budget'] ?? null, $revBudgetTotal, false, $proposal['project_type'] ?? null) ?>
+                        <span class="text-muted d-block mb-1">Year-wise Budget Formulation:</span>
+                        <?= render_yearly_budget_html($proposal['yearly_budget'] ?? null, $revBudgetTotal) ?>
                     </li>
                     <li class="list-group-item px-0 py-2">
                         <span class="text-muted d-block mb-1">Project Category & Funding:</span>
@@ -650,54 +677,13 @@ include __DIR__ . '/../includes/header.php';
                 <?php if (!empty($docs)): ?>
                     <h6 class="fw-bold small text-uppercase text-secondary mt-3 mb-2">Attached Documents:</h6>
                     <?php foreach ($docs as $d): ?>
-                        <a href="<?= e(url($d['file_path'])) ?>" download class="btn btn-sm btn-outline-secondary w-100 text-start text-truncate mb-1">
+                        <a href="<?= e($d['file_path']) ?>" download class="btn btn-sm btn-outline-secondary w-100 text-start text-truncate mb-1">
                             <i class="bi bi-file-earmark-pdf me-1 text-danger"></i> <?= e($d['file_name']) ?>
                         </a>
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- HoD Review Comments & Endorsement Decision Section (Positioned at the end of the proposal document) -->
-<div class="card shadow-sm border-0 mt-3 mb-5" id="hod-review-section" style="border-top: 4px solid #f59e0b !important;">
-    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <h5 class="fw-bold text-dark m-0">
-            <i class="bi bi-pen-fill text-warning me-2"></i>
-            <?php if (($proposal['proposal_category'] ?? '') === 'ongoing'): ?>
-                Head of Department (HoD) Progress Report Endorsement Decision
-            <?php elseif (($proposal['proposal_category'] ?? '') === 'completed'): ?>
-                Head of Department (HoD) Completion Report Endorsement Decision
-            <?php else: ?>
-                Head of Department (HoD) Comments &amp; Review Decision
-            <?php endif; ?>
-        </h5>
-        <span class="badge bg-warning text-dark px-3 py-2 fw-semibold">
-            <i class="bi bi-clipboard-check me-1"></i> Final Review &amp; Endorsement
-        </span>
-    </div>
-    <div class="card-body p-4">
-        <form method="POST" action="<?= url("/hod/review-proposal.php?id=" . ($id) . "") ?>">
-            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-
-            <div class="mb-3">
-                <label for="comments" class="form-label small fw-semibold text-secondary">
-                    HoD Reviewer's Comments / Feedback / Endorsement Remarks:
-                </label>
-                <textarea id="comments" name="comments" class="form-control" rows="4" placeholder="Mandatory if returning for revisions. Enter technical observations, gap critiques, or budget recommendations..."></textarea>
-                <small class="text-muted">These comments will be permanently recorded in the proposal timeline and visible to the Scientist and Joint Director.</small>
-            </div>
-
-            <div class="d-flex flex-wrap gap-3 justify-content-end align-items-center pt-3 border-top">
-                <button type="submit" name="decision" value="return" class="btn btn-outline-danger fw-semibold" data-confirm="Are you sure you want to RETURN this submission to the Scientist for revision?">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision
-                </button>
-                <button type="submit" name="decision" value="forward" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Are you sure you want to ENDORSE and FORWARD this submission to the Joint Director?">
-                    <i class="bi bi-check2-circle me-1"></i> Endorse & Forward to Joint Director
-                </button>
-            </div>
-        </form>
     </div>
 </div>
 

@@ -42,8 +42,6 @@ if (!can_view_proposal($proposal)) {
 
 $pageTitle = 'Proposal Details - ' . $proposal['proposal_number'];
 $currentUser = current_user();
-$userId = (int)($currentUser['id'] ?? 0);
-$isCoPi = ((int)$proposal['scientist_id'] !== $userId) && is_user_proposal_copi($id, $userId);
 
 // Fetch Co-PIs
 $copis = get_proposal_copis($id, (int)($proposal['linked_project_id'] ?? 0), (string)($proposal['project_number'] ?? ''));
@@ -86,16 +84,6 @@ include __DIR__ . '/../includes/header.php';
                 <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
                     <span class="badge bg-secondary font-monospace"><?= e($proposal['proposal_number']) ?></span>
                     <?= render_status_badge($proposal['current_status']) ?>
-
-                    <?php if ($isCoPi): ?>
-                        <span class="badge text-white px-2 py-1 shadow-xs font-monospace" style="background-color: #6f42c1 !important;">
-                            <i class="bi bi-people-fill me-1"></i> Role: Co-PI
-                        </span>
-                        <span class="badge bg-light text-secondary border px-2 py-1 font-monospace">
-                            <i class="bi bi-eye-fill me-1"></i> Read-Only View Mode
-                        </span>
-                    <?php endif; ?>
-
                     <?php if (($proposal['proposal_category'] ?? '') === 'completed'): ?>
                         <span class="badge bg-success text-white shadow-xs">
                             <i class="bi bi-check2-circle me-1"></i> Completion Project
@@ -146,12 +134,6 @@ include __DIR__ . '/../includes/header.php';
                 <a href="<?= url("/export-doc.php?id=" . ($proposal['id']) . "") ?>" class="btn btn-outline-secondary" title="Download Office Open XML Document (.docx)">
                     <i class="bi bi-file-earmark-word me-1"></i> Export Word (.docx)
                 </a>
-
-                <?php if ($isCoPi): ?>
-                    <span class="badge bg-light text-secondary border px-3 py-2 d-inline-flex align-items-center" style="font-size: 0.85rem;" title="Co-PI view only permission">
-                        <i class="bi bi-lock-fill text-muted me-1"></i> Co-PI View Only Mode
-                    </span>
-                <?php endif; ?>
 
                 <?php if (can_edit_proposal($proposal)): 
                     $editDetailUrl = url("/scientist/edit-proposal.php?id=" . $proposal['id']);
@@ -206,23 +188,6 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
-
-<?php if ($isCoPi): ?>
-    <div class="alert border shadow-xs d-flex align-items-center gap-3 mb-4 p-3" style="background-color: #f3e8ff; border-color: #d8b4fe !important; color: #581c87;" role="alert">
-        <div class="fs-2 text-purple"><i class="bi bi-people-fill"></i></div>
-        <div class="flex-grow-1">
-            <h6 class="fw-bold mb-1" style="color: #4a044e;">Co-Investigator (Co-PI) View Mode</h6>
-            <div class="small" style="color: #6b21a8;">
-                You are registered as a <strong>Co-PI</strong> on this research submission. Lead Principal Investigator: <strong><?= e($proposal['scientist_name']) ?></strong> (<?= e($proposal['scientist_designation']) ?>). You have full read-only permissions to review technical formulations, yearly budget breakdown, reviewer remarks, and attached documents.
-            </div>
-        </div>
-        <div>
-            <span class="badge bg-white text-purple border px-3 py-2 font-monospace" style="color: #6f42c1; border-color: #d8b4fe !important;">
-                <i class="bi bi-shield-check me-1"></i>Co-PI View Only
-            </span>
-        </div>
-    </div>
-<?php endif; ?>
 
 <?php if (in_array($proposal['current_status'], [STATUS_RETURNED_HOD, STATUS_RETURNED_JD])): ?>
     <div class="alert alert-warning border-warning shadow-sm mb-4" role="alert">
@@ -565,7 +530,7 @@ include __DIR__ . '/../includes/header.php';
                 ?>
                 <div class="mb-3 pb-2 border-bottom">
                     <span class="text-muted extra-small d-block fw-bold text-uppercase mb-1"><i class="bi bi-calendar3-range text-success me-1"></i> Year-wise Budget Allocation:</span>
-                    <?= render_yearly_budget_html($proposal['yearly_budget'] ?? null, $yearlyTotal, false, $proposal['project_type'] ?? null) ?>
+                    <?= render_yearly_budget_html($proposal['yearly_budget'] ?? null, $yearlyTotal) ?>
                 </div>
 
                 <div class="row g-2 small">
@@ -624,30 +589,9 @@ include __DIR__ . '/../includes/header.php';
                 <?php else: ?>
                     <div class="list-group list-group-flush">
                         <?php foreach ($copis as $cp): ?>
-                            <?php
-                            $isThisMe = false;
-                            $uEmail = strtolower(trim($currentUser['email'] ?? ''));
-                            $uName = strtolower(trim($currentUser['name'] ?? ''));
-                            $uNorm = normalize_person_name($currentUser['name'] ?? '');
-                            $cpEmail = strtolower(trim($cp['email'] ?? ''));
-                            $cpName = strtolower(trim($cp['co_pi_name'] ?? ''));
-                            $cpNorm = normalize_person_name($cp['co_pi_name'] ?? '');
-                            if ((!empty($uEmail) && !empty($cpEmail) && $uEmail === $cpEmail) ||
-                                (!empty($uName) && $uName === $cpName) ||
-                                (!empty($uNorm) && $uNorm === $cpNorm)) {
-                                $isThisMe = true;
-                            }
-                            ?>
-                            <div class="list-group-item px-2 py-2 <?= $isThisMe ? 'rounded border border-purple-subtle my-1' : '' ?>" style="<?= $isThisMe ? 'background-color: #f3e8ff !important;' : '' ?>">
+                            <div class="list-group-item px-2 py-2">
                                 <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong class="small text-dark"><?= e($cp['co_pi_name']) ?></strong>
-                                        <?php if ($isThisMe): ?>
-                                            <span class="badge text-white ms-1" style="background-color: #6f42c1; font-size: 0.68rem;">
-                                                <i class="bi bi-person-check-fill me-1"></i>You (Co-PI)
-                                            </span>
-                                        <?php endif; ?>
-                                    </div>
+                                    <strong class="small text-dark"><?= e($cp['co_pi_name']) ?></strong>
                                     <?php if (!empty($cp['designation'])): ?>
                                         <span class="badge bg-light text-secondary border"><?= e($cp['designation']) ?></span>
                                     <?php endif; ?>

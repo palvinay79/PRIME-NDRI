@@ -15,17 +15,7 @@ $currentUser = current_user();
 $userId = current_user_id();
 $userEmail = trim($currentUser['email'] ?? '');
 $userName = trim($currentUser['name'] ?? '');
-$normUserName = normalize_person_name($userName);
 $db = get_db();
-
-$copiSubquery = "p.id IN (
-    SELECT pcp.proposal_id FROM proposal_co_pis pcp 
-    WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
-       OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
-       OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
-       OR (LOWER(TRIM(pcp.co_pi_name)) LIKE ?)
-)";
-$copiSubqueryParams = [$userEmail, $userName, $normUserName, '%' . $normUserName . '%'];
 
 // Metrics
 $metrics = [
@@ -43,11 +33,15 @@ $stmt = $db->prepare("
     FROM proposals p 
     WHERE (
         p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
     )
     GROUP BY p.current_status
 ");
-$stmt->execute(array_merge([$userId], $copiSubqueryParams));
+$stmt->execute([$userId, $userEmail, $userName]);
 $statusCounts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
 $metrics['total'] = array_sum($statusCounts);
@@ -82,30 +76,42 @@ $stmt = $db->prepare("
     SELECT COUNT(DISTINCT p.id) FROM proposals p 
     WHERE (
         p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
     ) AND (p.proposal_category = 'new' OR p.proposal_category IS NULL)
 ");
-$stmt->execute(array_merge([$userId], $copiSubqueryParams));
+$stmt->execute([$userId, $userEmail, $userName]);
 $countNew = (int)$stmt->fetchColumn();
 
 $stmt = $db->prepare("
     SELECT COUNT(DISTINCT p.id) FROM proposals p 
     WHERE (
         p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
     ) AND p.proposal_category = 'ongoing'
 ");
-$stmt->execute(array_merge([$userId], $copiSubqueryParams));
+$stmt->execute([$userId, $userEmail, $userName]);
 $countOngoing = (int)$stmt->fetchColumn();
 
 $stmt = $db->prepare("
     SELECT COUNT(DISTINCT p.id) FROM proposals p 
     WHERE (
         p.scientist_id = ? OR 
-        (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+        (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+            SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+            WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+               OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+        ))
     ) AND p.proposal_category = 'completed'
 ");
-$stmt->execute(array_merge([$userId], $copiSubqueryParams));
+$stmt->execute([$userId, $userEmail, $userName]);
 $countCompleted = (int)$stmt->fetchColumn();
 
 // Active tab for proposal filtering
@@ -115,16 +121,18 @@ if (!in_array($activeTab, ['all', 'new', 'ongoing', 'completed'])) {
 }
 
 // Recent proposals filtered by active tab (Lead PI or Co-PI)
-$recentSql = "SELECT p.*, d.department_code, d.department_name,
-                     u.name as lead_pi_name, u.designation as lead_pi_designation
+$recentSql = "SELECT p.*, d.department_code, d.department_name
               FROM proposals p
               LEFT JOIN departments d ON p.department_id = d.id
-              LEFT JOIN users u ON p.scientist_id = u.id
               WHERE (
                   p.scientist_id = ? OR 
-                  (LOWER(TRIM(p.current_status)) != 'draft' AND {$copiSubquery})
+                  (LOWER(TRIM(p.current_status)) != 'draft' AND p.id IN (
+                      SELECT pcp.proposal_id FROM proposal_co_pis pcp 
+                      WHERE (pcp.email IS NOT NULL AND TRIM(pcp.email) != '' AND LOWER(TRIM(pcp.email)) = LOWER(TRIM(?)))
+                         OR (LOWER(TRIM(pcp.co_pi_name)) = LOWER(TRIM(?)))
+                  ))
               )";
-$recentParams = array_merge([$userId], $copiSubqueryParams);
+$recentParams = [$userId, $userEmail, $userName];
 
 if ($activeTab === 'new') {
     $recentSql .= " AND (p.proposal_category = 'new' OR p.proposal_category IS NULL)";
@@ -438,22 +446,12 @@ include __DIR__ . '/../includes/header.php';
                             </tr>
                         <?php else: ?>
                             <?php foreach ($recentProposals as $prop): ?>
-                                <?php
-                                $isCoPi = ((int)$prop['scientist_id'] !== (int)$userId);
-                                ?>
-                                <tr class="<?= $isCoPi ? 'table-light' : '' ?>">
+                                <tr>
                                     <td class="fw-semibold font-monospace small">
                                         <?= e($prop['proposal_number']) ?>
-                                        <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
-                                            <?php if ($isCoPi): ?>
-                                                <span class="badge text-white font-monospace shadow-xs px-2 py-1" style="background-color: #6f42c1 !important; font-size: 0.68rem;">
-                                                    <i class="bi bi-people-fill me-1"></i>Co-PI
-                                                </span>
-                                            <?php endif; ?>
-                                            <?php if (!empty($prop['project_number'])): ?>
-                                                <div class="extra-small text-muted font-monospace"><i class="bi bi-hash"></i><?= e($prop['project_number']) ?></div>
-                                            <?php endif; ?>
-                                        </div>
+                                        <?php if (!empty($prop['project_number'])): ?>
+                                            <div class="extra-small text-muted font-monospace"><i class="bi bi-hash"></i><?= e($prop['project_number']) ?></div>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <?= render_proposal_category_badge($prop['proposal_category'] ?? 'new') ?>
@@ -463,13 +461,6 @@ include __DIR__ . '/../includes/header.php';
                                             <?= e(mb_strimwidth($prop['title'], 0, 42, '...')) ?>
                                         </a>
                                         <small class="text-muted"><?= e($prop['department_name']) ?> | TRL-<?= e($prop['trl_level']) ?></small>
-                                        <?php if ($isCoPi && !empty($prop['lead_pi_name'])): ?>
-                                            <div class="extra-small mt-1 text-secondary">
-                                                <span class="badge border" style="background-color: #f3e8ff; color: #581c87; border-color: #d8b4fe !important; font-size: 0.68rem;">
-                                                    <i class="bi bi-person-badge-fill me-1"></i>Lead PI: <?= e($prop['lead_pi_name']) ?>
-                                                </span>
-                                            </div>
-                                        <?php endif; ?>
                                     </td>
                                     <td><?= render_status_badge($prop['current_status']) ?></td>
                                     <td class="small fw-semibold">
@@ -482,15 +473,10 @@ include __DIR__ . '/../includes/header.php';
                                     </td>
                                     <td class="text-end">
                                         <div class="btn-group btn-group-sm">
-                                            <?php if ($isCoPi): ?>
-                                                <span class="badge bg-light text-secondary border me-1 align-self-center py-1 px-2" style="font-size: 0.68rem;" title="Co-PI View Only Mode">
-                                                    <i class="bi bi-eye me-1"></i>View Only
-                                                </span>
-                                            <?php endif; ?>
-                                            <a href="<?= url("/scientist/proposal-details.php?id=" . ($prop['id'])) ?>" class="btn btn-outline-secondary" title="<?= $isCoPi ? 'View Details (Co-PI Mode)' : 'View Details' ?>">
+                                            <a href="<?= url("/scientist/proposal-details.php?id=" . ($prop['id'])) ?>" class="btn btn-outline-secondary" title="View Details">
                                                 <i class="bi bi-eye"></i>
                                             </a>
-                                            <?php if (!$isCoPi && (int)$prop['scientist_id'] === $userId && in_array($prop['current_status'], [STATUS_DRAFT, STATUS_RETURNED_HOD, STATUS_RETURNED_JD])): 
+                                            <?php if ((int)$prop['scientist_id'] === $userId && in_array($prop['current_status'], [STATUS_DRAFT, STATUS_RETURNED_HOD, STATUS_RETURNED_JD])): 
                                                 $editUrl = url("/scientist/edit-proposal.php?id=" . $prop['id']);
                                                 if (($prop['proposal_category'] ?? '') === 'ongoing') {
                                                     $editUrl = url("/scientist/ongoing-projects.php?id=" . $prop['id']);

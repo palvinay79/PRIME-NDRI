@@ -10,11 +10,6 @@ require_once __DIR__ . '/../includes/functions.php';
 
 require_role(ROLE_JOINT_DIRECTOR);
 
-// Ensure browser never caches user management page to avoid showing stale state
-header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-header("Cache-Control: post-check=0, pre-check=0", false);
-header("Pragma: no-cache");
-
 $pageTitle = 'User Management - Joint Director';
 $db = get_db();
 $currentUserId = current_user_id();

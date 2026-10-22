@@ -195,11 +195,7 @@ function format_duration(?string $startDate, ?string $endDate): string {
 
         // If raw exclusive diff or inclusive diff reaches 11 months and 28+ days (e.g. 11 months and 30 days), round up to full year
         $diffRaw = $start->diff($end);
-        if ($months === 11 && $days >= 28) {
-            $years += 1;
-            $months = 0;
-            $days = 0;
-        } elseif ($diffRaw->m === 11 && $diffRaw->d >= 28) {
+        if (($diffRaw->m === 11 && $diffRaw->d >= 28) || ($months === 11 && $days >= 28)) {
             $years = max($years, (int)$diffRaw->y + 1);
             $months = 0;
             $days = 0;
@@ -210,11 +206,6 @@ function format_duration(?string $startDate, ?string $endDate): string {
                 $years += 1;
                 $months = 0;
             }
-        }
-
-        if ($months >= 12) {
-            $years += intdiv($months, 12);
-            $months = $months % 12;
         }
 
         $parts = [];
@@ -633,14 +624,6 @@ function get_project_copis(int $projectId): array {
 }
 
 /**
- * Normalize person name by stripping title prefixes (Dr., Prof., Er., Mr., etc.) and whitespace
- */
-function normalize_person_name(string $name): string {
-    $clean = preg_replace('/^(dr\.|dr|prof\.|prof|er\.|er|mr\.|mr|mrs\.|mrs|ms\.|ms)\s+/i', '', trim($name));
-    return strtolower(preg_replace('/\s+/', ' ', trim($clean)));
-}
-
-/**
  * Check if a specific user is a Co-PI on a given proposal
  */
 function is_user_proposal_copi(int $proposalId, ?int $userId = null): bool {
@@ -651,30 +634,15 @@ function is_user_proposal_copi(int $proposalId, ?int $userId = null): bool {
     $stmtU->execute([$userId]);
     $u = $stmtU->fetch();
     if (!$u) return false;
-    $uEmail = strtolower(trim($u['email'] ?? ''));
-    $uName = strtolower(trim($u['name'] ?? ''));
-    $uNormName = normalize_person_name($u['name'] ?? '');
-
-    $stmt = $db->prepare("SELECT co_pi_name, email FROM proposal_co_pis WHERE proposal_id = ?");
-    $stmt->execute([$proposalId]);
-    $copis = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    if (empty($copis)) return false;
-
-    foreach ($copis as $cp) {
-        $cEmail = strtolower(trim($cp['email'] ?? ''));
-        if (!empty($uEmail) && !empty($cEmail) && $uEmail === $cEmail) {
-            return true;
-        }
-        $cName = strtolower(trim($cp['co_pi_name'] ?? ''));
-        if (!empty($uName) && !empty($cName) && $uName === $cName) {
-            return true;
-        }
-        $cNormName = normalize_person_name($cp['co_pi_name'] ?? '');
-        if (!empty($uNormName) && !empty($cNormName) && $uNormName === $cNormName) {
-            return true;
-        }
-    }
-    return false;
+    $uEmail = trim($u['email'] ?? '');
+    $uName = trim($u['name'] ?? '');
+    
+    $stmt = $db->prepare("SELECT 1 FROM proposal_co_pis WHERE proposal_id = ? AND (
+        (email IS NOT NULL AND TRIM(email) != '' AND LOWER(TRIM(email)) = LOWER(TRIM(?)))
+        OR (LOWER(TRIM(co_pi_name)) = LOWER(TRIM(?)))
+    ) LIMIT 1");
+    $stmt->execute([$proposalId, $uEmail, $uName]);
+    return (bool)$stmt->fetchColumn();
 }
 
 /**
@@ -761,8 +729,7 @@ function get_hod_approver_info(int $proposalId, ?int $departmentId = null): arra
 
 /**
  * Parse and normalize yearly budget breakdown from JSON or array.
- * Falls back to computing equal or sensible yearly breakdown if only total budget is known
- * or if the stored breakdown has 0.00 total allocation.
+ * Falls back to computing equal or sensible yearly breakdown if only total budget is known.
  */
 function parse_yearly_budget($rawBudget, float $fallbackTotal = 0, int $fallbackYears = 3): array {
     $breakdown = [];
@@ -780,35 +747,14 @@ function parse_yearly_budget($rawBudget, float $fallbackTotal = 0, int $fallback
         $idx = 1;
         foreach ($breakdown as $key => $val) {
             $amount = (float)$val;
-            $label = is_string($key) && !is_numeric($key) ? trim($key) : "Year {$idx}";
+            $label = is_string($key) && !is_numeric($key) ? $key : "Year {$idx}";
             if (is_numeric($key)) {
                 $label = "Year {$key}";
             }
             $normalized[$label] = $amount;
             $idx++;
         }
-
-        // If the breakdown has non-zero total, or there's no fallback total, return it
-        if (array_sum($normalized) > 0 || $fallbackTotal <= 0) {
-            return $normalized;
-        }
-
-        // If all yearly values in the breakdown sum to 0 (e.g. {"Year 1": 0}), but we have a positive fallback total:
-        // Distribute the fallback total across the existing year labels!
-        $numYears = max(1, count($normalized));
-        $base = round($fallbackTotal / $numYears, 2);
-        $runningSum = 0;
-        $allocated = [];
-        $keys = array_keys($normalized);
-        foreach ($keys as $kIdx => $k) {
-            if ($kIdx === $numYears - 1) {
-                $allocated[$k] = round($fallbackTotal - $runningSum, 2);
-            } else {
-                $allocated[$k] = $base;
-                $runningSum += $base;
-            }
-        }
-        return $allocated;
+        return $normalized;
     }
 
     if ($fallbackTotal > 0) {
@@ -832,26 +778,23 @@ function parse_yearly_budget($rawBudget, float $fallbackTotal = 0, int $fallback
 /**
  * Render an HTML view of the year-wise budget breakdown.
  */
-function render_yearly_budget_html($yearlyBudget, float $totalBudget = 0, bool $compact = false, ?string $projectType = null): string {
-    $parsed = parse_yearly_budget($yearlyBudget, $totalBudget);
-    $computedTotal = array_sum($parsed);
-    if ($computedTotal <= 0 && $totalBudget > 0) {
-        $computedTotal = $totalBudget;
-    }
-
-    // Check if this is an explicit single-grant externally funded project with no yearly breakdown
-    $isExternal = ($projectType === 'funding_agency');
+function render_yearly_budget_html($yearlyBudget, float $totalBudget = 0, bool $compact = false): string {
     $hasExplicitYearly = !empty($yearlyBudget) && !(is_string($yearlyBudget) && in_array(trim($yearlyBudget), ['', '[]', '{}', 'null']));
-
-    if ($isExternal && !$hasExplicitYearly && $totalBudget > 0) {
+    if (!$hasExplicitYearly && $totalBudget > 0) {
         if ($compact) {
             return '<span class="badge bg-success-subtle text-success border border-success-subtle extra-small px-2 py-1"><i class="bi bi-bank2 me-1"></i><strong>Grant:</strong> ' . format_currency($totalBudget) . ' (Single Allocation)</span>';
         }
         return '<div class="p-2 rounded bg-light border border-success-subtle d-flex flex-wrap align-items-center justify-content-between mt-1 gap-2"><span class="text-secondary small"><i class="bi bi-bank2 text-success me-1"></i><strong>External Project Grant:</strong></span><span class="fw-bold font-monospace text-primary fs-6">' . format_currency($totalBudget) . '</span><span class="badge bg-success-subtle text-success border border-success-subtle extra-small">Single Grant Allocation</span></div>';
     }
 
-    if (empty($parsed) || ($computedTotal <= 0 && $totalBudget <= 0)) {
-        return '<span class="text-muted small">No budget breakdown recorded</span>';
+    $parsed = parse_yearly_budget($yearlyBudget, $totalBudget);
+    $computedTotal = array_sum($parsed);
+    if ($computedTotal <= 0 && $totalBudget > 0) {
+        $computedTotal = $totalBudget;
+    }
+
+    if (empty($parsed)) {
+        return '<span class="text-muted small">No yearly breakdown recorded</span>';
     }
 
     if ($compact) {
