@@ -507,12 +507,12 @@ if ($cat === 'completed') {
     $builder->addParagraph($proposal['budget_justification']);
 }
 
-// Year-wise Budget Allocation Breakdown (if present)
+// Year-wise Budget Allocation Breakdown (if present or in-house project with budget)
 $yearlyTotal = (float)($proposal['approved_budget'] ?: ($proposal['budget_allocated'] ?: $proposal['proposed_budget']));
 $hasExplicitYearly = !empty($proposal['yearly_budget']) && !(is_string($proposal['yearly_budget']) && in_array(trim($proposal['yearly_budget']), ['', '[]', '{}', 'null']));
-if ($hasExplicitYearly) {
-    $yearlyArr = parse_yearly_budget($proposal['yearly_budget'], $yearlyTotal);
-    if (!empty($yearlyArr)) {
+if ($hasExplicitYearly || ($yearlyTotal > 0 && ($proposal['project_type'] ?? '') !== 'funding_agency')) {
+    $yearlyArr = parse_yearly_budget($proposal['yearly_budget'] ?? null, $yearlyTotal);
+    if (!empty($yearlyArr) && array_sum($yearlyArr) > 0) {
         $builder->addHeading("YEAR-WISE BUDGET ALLOCATION BREAKDOWN");
         $bRows = [];
         foreach ($yearlyArr as $yr => $amt) {
@@ -535,6 +535,49 @@ if (!empty($documents)) {
         ];
     }
     $builder->addTable(["Document Name", "File Size", "Uploaded Date & Time"], $docRows);
+}
+
+// Head of Department (HOD) Comments & Joint Director (JDR) Comments at the end of the document
+$hodCommentText = '';
+$hodApprovedAt = '';
+$jdrCommentText = '';
+$jdrApprovedAt = '';
+
+if (!empty($history)) {
+    foreach ($history as $h) {
+        if (($h['action_by_role'] ?? '') === 'HOD' || str_contains($h['new_status'] ?? '', 'Pending Joint Director')) {
+            if (!empty($h['comments'])) {
+                $hodCommentText = $h['comments'];
+                $hodApprovedAt = format_datetime($h['created_at']);
+            }
+        }
+        if (($h['action_by_role'] ?? '') === 'Joint Director' || str_contains($h['new_status'] ?? '', 'Approved for IRC') || str_contains($h['new_status'] ?? '', 'Returned by Joint Director')) {
+            if (!empty($h['comments'])) {
+                $jdrCommentText = $h['comments'];
+                $jdrApprovedAt = format_datetime($h['created_at']);
+            }
+        }
+    }
+}
+
+$builder->addHeading("HEAD OF DEPARTMENT (HOD) COMMENTS & ENDORSEMENT");
+if (!empty($hodCommentText)) {
+    $builder->addParagraph("Endorsement Remarks: " . $hodCommentText);
+    if (!empty($hodApprovedAt)) {
+        $builder->addParagraph("Recorded on: " . $hodApprovedAt, false, '64748B');
+    }
+} else {
+    $builder->addParagraph("No written remarks entered by Head of Department.");
+}
+
+$builder->addHeading("JOINT DIRECTOR (RESEARCH) SCREENING DIRECTIVES & DECISION");
+if (!empty($jdrCommentText)) {
+    $builder->addParagraph("Directorate Observations: " . $jdrCommentText);
+    if (!empty($jdrApprovedAt)) {
+        $builder->addParagraph("Recorded on: " . $jdrApprovedAt, false, '64748B');
+    }
+} else {
+    $builder->addParagraph("No written directives entered by Joint Director.");
 }
 
 // Proposal Workflow History

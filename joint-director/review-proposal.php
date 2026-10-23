@@ -201,65 +201,15 @@ include __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
-<!-- HOD Endorsement Banner -->
-<div class="alert alert-info border-info shadow-sm d-flex flex-wrap align-items-center justify-content-between p-3 mb-4 gap-2">
-    <div class="d-flex align-items-center gap-3">
-        <div class="p-2 rounded-circle bg-primary text-white">
-            <i class="bi bi-person-check-fill fs-5"></i>
-        </div>
-        <div>
-            <div class="fw-bold text-dark fs-6">
-                Approved & Endorsed by Head of Department: <span class="text-primary"><?= e($hodInfo['name']) ?></span> (<?= e($hodInfo['designation']) ?>)
-            </div>
-            <div class="small text-muted mt-1">
-                Division: <strong><?= e($proposal['department_name']) ?> (<?= e($proposal['department_code']) ?>)</strong>
-                <?php if (!empty($hodInfo['approved_at'])): ?>
-                    &bull; Forwarded on: <?= format_date($hodInfo['approved_at'], 'd M Y, h:i A') ?>
-                <?php endif; ?>
-                <?php if (!empty($hodInfo['comments'])): ?>
-                    <div class="mt-1 text-dark fst-italic">&ldquo;<?= e($hodInfo['comments']) ?>&rdquo;</div>
-                <?php endif; ?>
-            </div>
-        </div>
+<!-- Directorate Screening Guidance & Jump to Decision Banner -->
+<div class="alert alert-light border border-primary-subtle shadow-sm d-flex flex-wrap justify-content-between align-items-center py-2 px-3 mb-4 gap-2" style="background-color: #f8fafc;">
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-success text-white"><i class="bi bi-patch-check-fill me-1"></i>HOD Endorsed</span>
+        <span class="text-dark small">Stage 1 Directorate Screening. Review the proposal document below. The <strong>HoD Endorsement Comments</strong> and <strong>JDR Decision Section</strong> are located at the end of the document.</span>
     </div>
-    <span class="badge bg-success text-white py-2 px-3 font-monospace"><i class="bi bi-patch-check-fill me-1"></i>HOD Endorsed</span>
-</div>
-
-<!-- JD Decision Action Box at Top -->
-<div class="card shadow-sm border-0 mb-4" style="border-top: 4px solid #1a365d !important;">
-    <div class="card-header bg-white py-3">
-        <h5 class="fw-bold text-dark m-0">
-            <i class="bi bi-shield-check text-primary me-2"></i>
-            <?php if (($proposal['proposal_category'] ?? '') === 'ongoing'): ?>
-                Stage 1: Joint Director Review &mdash; Progress Report Decision
-            <?php elseif (($proposal['proposal_category'] ?? '') === 'completed'): ?>
-                Stage 1: Joint Director Review &mdash; Completion Report Decision
-            <?php else: ?>
-                Stage 1: Joint Director Review &mdash; Initial Screening Decision
-            <?php endif; ?>
-        </h5>
-    </div>
-    <div class="card-body p-4">
-        <form method="POST" action="<?= url("/joint-director/review-proposal.php?id=" . ($id) . "") ?>">
-            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-
-            <div class="mb-3">
-                <label for="remarks" class="form-label small fw-semibold text-secondary">
-                    Directorate Observations / Revision Directives:
-                </label>
-                <textarea id="remarks" name="remarks" class="form-control" rows="4" placeholder="Mandatory if returning for revision. Note any institutional modifications, budget caps, or inter-divisional collaborator requirements..."></textarea>
-            </div>
-
-            <div class="d-flex flex-wrap gap-3 justify-content-end align-items-center pt-3 border-top">
-                <button type="submit" name="decision" value="return" class="btn btn-outline-danger fw-semibold" data-confirm="Are you sure you want to RETURN this submission for revision?">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision
-                </button>
-                <button type="submit" name="decision" value="approve_irc" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Approve this submission for presentation at the next Institute Research Council (IRC) Meeting?">
-                    <i class="bi bi-award me-1"></i> Approve for IRC Meeting
-                </button>
-            </div>
-        </form>
-    </div>
+    <a href="#jdr-review-section" class="btn btn-outline-primary btn-sm fw-semibold shadow-sm">
+        <i class="bi bi-arrow-down-circle me-1"></i> Jump to HoD &amp; JDR Comments
+    </a>
 </div>
 
 <!-- Proposal Details Summary -->
@@ -472,29 +422,6 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             </div>
         <?php endif; ?>
-
-        <!-- Previous Reviewer Comments -->
-        <div class="detail-section-card">
-            <div class="detail-section-header">
-                <i class="bi bi-chat-dots text-primary"></i> Previous Review Comments (HOD Endorsement)
-            </div>
-            <div class="detail-section-body">
-                <?php if (empty($comments)): ?>
-                    <p class="text-muted small mb-0">No prior comments recorded.</p>
-                <?php else: ?>
-                    <?php foreach ($comments as $c): ?>
-                        <div class="border rounded p-3 mb-2 bg-light-subtle">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <strong><?= e($c['user_name']) ?> <span class="text-muted small">(<?= e($c['role_name']) ?>)</span></strong>
-                                <span class="badge bg-secondary-subtle text-dark border"><?= e($c['comment_stage']) ?></span>
-                            </div>
-                            <div class="small text-secondary mb-1"><?= nl2br(e($c['comment'])) ?></div>
-                            <small class="text-muted"><?= format_datetime($c['created_at']) ?></small>
-                        </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </div>
     </div>
 
     <div class="col-lg-4">
@@ -560,8 +487,8 @@ include __DIR__ . '/../includes/header.php';
                     $revBudgetTotal = (float)($proposal['approved_budget'] ?: ($proposal['budget_allocated'] ?: $proposal['proposed_budget']));
                     ?>
                     <li class="list-group-item px-0 py-2">
-                        <span class="text-muted d-block mb-1">Year-wise Budget Formulation:</span>
-                        <?= render_yearly_budget_html($proposal['yearly_budget'] ?? null, $revBudgetTotal) ?>
+                        <span class="text-muted d-block mb-1">Year-wise Budget Allocation:</span>
+                        <?= render_yearly_budget_html($proposal['yearly_budget'] ?? null, $revBudgetTotal, false, $proposal['project_type'] ?? null) ?>
                     </li>
                     <li class="list-group-item px-0 py-2">
                         <span class="text-muted d-block mb-1">Project Category & Funding:</span>
@@ -589,7 +516,7 @@ include __DIR__ . '/../includes/header.php';
                         <strong class="text-primary"><i class="bi bi-hourglass-split me-1"></i><?= format_duration($proposal['proposed_start_date'], $proposal['proposed_end_date']) ?></strong>
                     </li>
                     <li class="list-group-item px-0 py-2">
-                        <span class="text-muted d-block">TRL Readiness:</span>
+                        <span class="text-muted d-block">Readiness Level:</span>
                         <span class="badge bg-info-subtle text-dark border">TRL-<?= e($proposal['trl_level']) ?></span>
                     </li>
                 </ul>
@@ -615,13 +542,114 @@ include __DIR__ . '/../includes/header.php';
                 <?php if (!empty($docs)): ?>
                     <h6 class="fw-bold small text-uppercase text-secondary mt-3 mb-2">Attached Documents:</h6>
                     <?php foreach ($docs as $d): ?>
-                        <a href="<?= e($d['file_path']) ?>" download class="btn btn-sm btn-outline-secondary w-100 text-start text-truncate mb-1">
+                        <a href="<?= e(url($d['file_path'])) ?>" download class="btn btn-sm btn-outline-secondary w-100 text-start text-truncate mb-1">
                             <i class="bi bi-file-earmark-pdf me-1 text-danger"></i> <?= e($d['file_name']) ?>
                         </a>
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Head of Department (HoD) Comments & Endorsement (Positioned at the end of the proposal document) -->
+<div class="card shadow-sm border-0 mt-3 mb-4" id="hod-comments-section" style="border-top: 4px solid #10b981 !important;">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="fw-bold text-dark m-0">
+            <i class="bi bi-person-check-fill text-success me-2"></i>
+            Head of Department (HoD) Comments &amp; Endorsement
+        </h5>
+        <span class="badge bg-success text-white py-1 px-3 font-monospace">
+            <i class="bi bi-patch-check-fill me-1"></i>HOD Endorsed
+        </span>
+    </div>
+    <div class="card-body p-4">
+        <div class="d-flex align-items-start gap-3 mb-3">
+            <div class="p-2 rounded-circle bg-success bg-opacity-10 text-success">
+                <i class="bi bi-person-badge fs-4"></i>
+            </div>
+            <div>
+                <div class="fw-bold text-dark fs-6">
+                    <?= e($hodInfo['name']) ?> <span class="text-muted small fw-normal">(<?= e($hodInfo['designation']) ?>)</span>
+                </div>
+                <div class="small text-muted">
+                    Division / Department: <strong><?= e($proposal['department_name']) ?> (<?= e($proposal['department_code']) ?>)</strong>
+                    <?php if (!empty($hodInfo['approved_at'])): ?>
+                        &bull; Forwarded on: <strong><?= format_date($hodInfo['approved_at'], 'd M Y, h:i A') ?></strong>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">
+            HoD Endorsement Remarks &amp; Feedback:
+        </label>
+        <?php if (!empty($hodInfo['comments'])): ?>
+            <div class="p-3 rounded border border-success-subtle text-dark mb-3" style="line-height: 1.6; font-size: 0.95rem; background-color: #f0fdf4 !important;">
+                <i class="bi bi-quote text-success fs-5 me-1"></i><?= nl2br(e($hodInfo['comments'])) ?>
+            </div>
+        <?php else: ?>
+            <div class="p-3 bg-light rounded border text-muted fst-italic small mb-3">
+                No written comments entered by the Head of Department. Proposal was formally endorsed and forwarded.
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($comments)): ?>
+            <div class="mt-3 pt-3 border-top">
+                <span class="extra-small text-uppercase fw-bold text-muted d-block mb-2">Previous Review / Discussion Comments Log:</span>
+                <?php foreach ($comments as $c): ?>
+                    <div class="border rounded p-2 mb-2 bg-light small">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong><?= e($c['user_name']) ?> <span class="text-muted extra-small">(<?= e($c['role_name']) ?>)</span></strong>
+                            <span class="badge bg-secondary-subtle text-dark border extra-small"><?= e($c['comment_stage']) ?></span>
+                        </div>
+                        <div class="text-secondary"><?= nl2br(e($c['comment'])) ?></div>
+                        <span class="text-muted extra-small"><?= format_datetime($c['created_at']) ?></span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Joint Director (JDR) Decision & Comments Section (Positioned at the end of the proposal document) -->
+<div class="card shadow-sm border-0 mb-5" id="jdr-review-section" style="border-top: 4px solid #1a365d !important;">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="fw-bold text-dark m-0">
+            <i class="bi bi-shield-check text-primary me-2"></i>
+            <?php if (($proposal['proposal_category'] ?? '') === 'ongoing'): ?>
+                Stage 1: Joint Director (JDR) Progress Report Decision
+            <?php elseif (($proposal['proposal_category'] ?? '') === 'completed'): ?>
+                Stage 1: Joint Director (JDR) Completion Report Decision
+            <?php else: ?>
+                Stage 1: Joint Director (JDR) Review Comments &amp; Screening Decision
+            <?php endif; ?>
+        </h5>
+        <span class="badge bg-primary text-white px-3 py-2 fw-semibold">
+            <i class="bi bi-award me-1"></i> Stage 1 Directorate Screening
+        </span>
+    </div>
+    <div class="card-body p-4">
+        <form method="POST" action="<?= url("/joint-director/review-proposal.php?id=" . ($id) . "") ?>">
+            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+
+            <div class="mb-3">
+                <label for="remarks" class="form-label small fw-semibold text-secondary">
+                    Joint Director (JDR) Observations / Revision Directives:
+                </label>
+                <textarea id="remarks" name="remarks" class="form-control" rows="4" placeholder="Mandatory if returning for revision. Note any institutional modifications, budget caps, or inter-divisional collaborator requirements..."></textarea>
+                <small class="text-muted">Directives entered here will be permanently recorded in the proposal timeline and visible to the Lead Scientist and HOD.</small>
+            </div>
+
+            <div class="d-flex flex-wrap gap-3 justify-content-end align-items-center pt-3 border-top">
+                <button type="submit" name="decision" value="return" class="btn btn-outline-danger fw-semibold" data-confirm="Are you sure you want to RETURN this submission for revision?">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision
+                </button>
+                <button type="submit" name="decision" value="approve_irc" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Approve this submission for presentation at the next Institute Research Council (IRC) Meeting?">
+                    <i class="bi bi-award me-1"></i> Approve for IRC Meeting
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 

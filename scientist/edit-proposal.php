@@ -82,10 +82,33 @@ if (in_array($proposal['current_status'], [STATUS_RETURNED_HOD, STATUS_RETURNED_
     $returnComment = $stmt->fetch();
 }
 
+// Fetch existing attached documents
+$stmtDocs = $db->prepare("SELECT * FROM proposal_documents WHERE proposal_id = ? ORDER BY created_at DESC");
+$stmtDocs->execute([$id]);
+$existingDocs = $stmtDocs->fetchAll();
+
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
+
+    // Handle document removal request
+    if (isset($_POST['action']) && $_POST['action'] === 'delete_document') {
+        $delDocId = (int)($_POST['doc_id'] ?? 0);
+        $stmtFind = $db->prepare("SELECT * FROM proposal_documents WHERE id = ? AND proposal_id = ?");
+        $stmtFind->execute([$delDocId, $id]);
+        $targetDoc = $stmtFind->fetch();
+        if ($targetDoc) {
+            $absPath = __DIR__ . '/..' . $targetDoc['file_path'];
+            if (file_exists($absPath)) {
+                @unlink($absPath);
+            }
+            $db->prepare("DELETE FROM proposal_documents WHERE id = ?")->execute([$delDocId]);
+            flash('success', "Attached document '{$targetDoc['file_name']}' was removed.");
+        }
+        header("Location: " . url("/scientist/edit-proposal.php?id={$id}"));
+        exit;
+    }
 
     $submissionAction = $_POST['submit_action'] ?? 'draft'; // 'save_draft' or 'resubmit'
 
@@ -158,12 +181,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sumYearly += $amt;
             }
         }
-        if ($sumYearly > 0) {
-            $budget = $sumYearly;
-        } elseif ($budget > 0 && empty($yearlyBudgetMap)) {
-            $yearlyBudgetMap = ['Year 1' => $budget];
+
+        // Check if single budget was passed as fallback
+        if ($budget <= 0 && $singleBudget > 0) {
+            $budget = $singleBudget;
         }
-        $yearlyBudgetJson = !empty($yearlyBudgetMap) ? json_encode($yearlyBudgetMap) : null;
+
+        if ($sumYearly > 0) {
+            // User provided valid positive yearly breakdown amounts
+            $budget = $sumYearly;
+        } elseif ($budget > 0) {
+            // User entered total proposed budget, but yearly amounts were 0 or blank.
+            // Distribute total proposed budget across the project tenure years!
+            $yearKeys = !empty($yearlyBudgetMap) ? array_keys($yearlyBudgetMap) : [];
+            if (empty($yearKeys)) {
+                $numY = max(1, $tenureYears ?? 1);
+                for ($y = 1; $y <= $numY; $y++) {
+                    $yearKeys[] = "Year {$y}";
+                }
+            }
+            $numY = count($yearKeys);
+            $base = round($budget / $numY, 2);
+            $runningSum = 0;
+            $yearlyBudgetMap = [];
+            foreach ($yearKeys as $kIdx => $k) {
+                if ($kIdx === $numY - 1) {
+                    $yearlyBudgetMap[$k] = round($budget - $runningSum, 2);
+                } else {
+                    $yearlyBudgetMap[$k] = $base;
+                    $runningSum += $base;
+                }
+            }
+        }
+        $yearlyBudgetJson = (!empty($yearlyBudgetMap) && array_sum($yearlyBudgetMap) > 0) ? json_encode($yearlyBudgetMap) : null;
     }
 
     $budgetJustification = sanitize($_POST['budget_justification'] ?? '');
@@ -267,6 +317,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Document upload validation (Optional, strictly ONE document allowed, formats: PDF, DOCX, DOC, etc., strictly under 1 MB)
+    $uploadedDoc = null;
+    $allowedDocExts = ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'xlsx', 'xls', 'png', 'jpg', 'jpeg'];
+    $maxDocBytes = 1048576; // 1 MB (1024 * 1024 bytes)
+
+    $rawFilesToCheck = [];
+    if (isset($_FILES['proposal_document']) && !empty($_FILES['proposal_document']['name']) && !is_array($_FILES['proposal_document']['name']) && $_FILES['proposal_document']['error'] !== UPLOAD_ERR_NO_FILE) {
+        $rawFilesToCheck[] = [
+            'name' => basename($_FILES['proposal_document']['name']),
+            'error' => (int)$_FILES['proposal_document']['error'],
+            'size' => (int)$_FILES['proposal_document']['size'],
+            'tmp_name' => $_FILES['proposal_document']['tmp_name'],
+            'type' => $_FILES['proposal_document']['type'] ?? 'application/octet-stream'
+        ];
+    } elseif (isset($_FILES['proposal_documents']) && is_array($_FILES['proposal_documents']['name'])) {
+        foreach ($_FILES['proposal_documents']['name'] as $fIdx => $rawName) {
+            if (!empty($rawName) && ($_FILES['proposal_documents']['error'][$fIdx] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $rawFilesToCheck[] = [
+                    'name' => basename($rawName),
+                    'error' => (int)$_FILES['proposal_documents']['error'][$fIdx],
+                    'size' => (int)$_FILES['proposal_documents']['size'][$fIdx],
+                    'tmp_name' => $_FILES['proposal_documents']['tmp_name'][$fIdx],
+                    'type' => $_FILES['proposal_documents']['type'][$fIdx] ?? 'application/octet-stream'
+                ];
+            }
+        }
+    }
+
+    if (count($rawFilesToCheck) > 1) {
+        $error = "Only one document can be attached to the proposal. Please select only a single file.";
+    } elseif (!empty($rawFilesToCheck)) {
+        $item = $rawFilesToCheck[0];
+        if ($item['error'] !== UPLOAD_ERR_OK) {
+            $error = "Error uploading document '{$item['name']}': " . ($item['error'] === UPLOAD_ERR_INI_SIZE || $item['error'] === UPLOAD_ERR_FORM_SIZE ? "File exceeds server upload size limit." : "Code {$item['error']}");
+        } elseif ($item['size'] > $maxDocBytes) {
+            $sizeKb = round($item['size'] / 1024, 1);
+            $error = "The uploaded file '{$item['name']}' ({$sizeKb} KB) exceeds the 1 MB limit. Please attach a document strictly under 1 MB.";
+        } elseif ($item['size'] <= 0) {
+            $error = "The uploaded file '{$item['name']}' is empty (0 bytes).";
+        } else {
+            $fileExt = strtolower(pathinfo($item['name'], PATHINFO_EXTENSION));
+            if (!in_array($fileExt, $allowedDocExts)) {
+                $error = "The file '{$item['name']}' has an unsupported file format (.{$fileExt}). Allowed formats are PDF (.pdf), Word (.docx, .doc), OpenDocument (.odt), Text (.txt, .rtf), Excel (.xlsx, .xls), or Images (.png, .jpg).";
+            } else {
+                $uploadedDoc = $item;
+            }
+        }
+    }
+
     if (empty($error)) {
         try {
             $db->beginTransaction();
@@ -326,6 +425,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $now,
                 $id
             ]);
+
+            // Save attached single document if provided
+            if ($uploadedDoc) {
+                $uploadDir = __DIR__ . '/../uploads/proposals';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0777, true);
+                }
+                $cleanOrig = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', $uploadedDoc['name']);
+                $savedFileName = 'prop_' . $id . '_' . bin2hex(random_bytes(6)) . '_' . $cleanOrig;
+                $targetPath = $uploadDir . '/' . $savedFileName;
+
+                if (move_uploaded_file($uploadedDoc['tmp_name'], $targetPath)) {
+                    $relPath = '/uploads/proposals/' . $savedFileName;
+                    $stmtDoc = $db->prepare("INSERT INTO proposal_documents (proposal_id, file_name, file_path, file_type, file_size, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                    $stmtDoc->execute([
+                        $id,
+                        $uploadedDoc['name'],
+                        $relPath,
+                        $uploadedDoc['type'],
+                        $uploadedDoc['size'],
+                        $userId,
+                        date('Y-m-d H:i:s')
+                    ]);
+                } else {
+                    error_log("Failed to move uploaded proposal document to {$targetPath}");
+                }
+            }
 
             // Update Co-PIs
             $db->prepare("DELETE FROM proposal_co_pis WHERE proposal_id = ?")->execute([$id]);
@@ -962,6 +1088,88 @@ include __DIR__ . '/../includes/header.php';
                         <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded! (Max 25 words)
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attached Documents & Supporting Annexures (Max 1 MB) -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-paperclip text-primary fs-5"></i>
+                <h6 class="fw-bold text-dark m-0">Attached Documents &amp; Supporting Annexures</h6>
+            </div>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                <i class="bi bi-file-earmark-arrow-up me-1"></i>Max 1 MB &middot; PDF, DOCX, DOC, Image
+            </span>
+        </div>
+        <div class="card-body">
+            <?php if (!empty($existingDocs)): ?>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-secondary">Currently Attached Documents:</label>
+                    <div class="list-group">
+                        <?php foreach ($existingDocs as $edoc): ?>
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 bg-light">
+                                <div class="text-truncate me-2">
+                                    <i class="bi bi-file-earmark-text text-primary me-2"></i>
+                                    <span class="fw-semibold text-dark"><?= e($edoc['file_name']) ?></span>
+                                    <span class="text-muted extra-small ms-2">(<?= round(($edoc['file_size'] ?? 0) / 1024, 1) ?> KB)</span>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <a href="<?= e(url($edoc['file_path'])) ?>" download class="btn btn-sm btn-outline-secondary" title="Download Document">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                    <button type="submit" name="action" value="delete_document" onclick="document.getElementById('delete_doc_id_input').value = '<?= $edoc['id'] ?>'; return confirm('Are you sure you want to remove this attached document?');" class="btn btn-sm btn-outline-danger" title="Remove Document">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <input type="hidden" name="doc_id" id="delete_doc_id_input" value="">
+
+            <div class="p-3 bg-light rounded border mb-2">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <label for="proposal_document" class="form-label small fw-bold text-dark m-0">
+                        <i class="bi bi-file-earmark-arrow-up text-primary me-1"></i> <?= !empty($existingDocs) ? 'Upload Additional Document / Annexure (Optional)' : 'Upload Proposal Document / Annexure (Optional)' ?>
+                    </label>
+                    <span class="badge bg-info-subtle text-dark border">
+                        <i class="bi bi-info-circle me-1"></i> Strictly 1 Document
+                    </span>
+                </div>
+                <input type="file" 
+                       name="proposal_document" 
+                       id="proposal_document" 
+                       class="form-control bg-white" 
+                       accept=".pdf,.docx,.doc,.txt,.rtf,.odt,.xlsx,.xls,.png,.jpg,.jpeg">
+                <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
+                    <div class="form-text extra-small text-muted m-0">
+                        <strong>Allowed Formats:</strong> PDF (.pdf), Word (.docx, .doc), OpenDocument (.odt), Text (.txt, .rtf), Excel (.xlsx, .xls), Images (.png, .jpg).
+                        <span class="text-danger fw-semibold d-inline-block ms-1"><i class="bi bi-exclamation-circle me-1"></i>Must be strictly under 1 MB. Maximum 1 document.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-time Selected Single File Preview -->
+            <div id="selected_files_list_container" class="mt-3" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="small fw-bold text-secondary text-uppercase">
+                        <i class="bi bi-file-earmark-check me-1"></i> Selected Document to Upload:
+                    </span>
+                    <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size: 0.75rem;" onclick="clearSelectedProposalDocuments()">
+                        <i class="bi bi-x-circle me-1"></i> Remove File
+                    </button>
+                </div>
+                <div id="selected_files_list" class="list-group mb-2">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+
+            <div id="doc_file_warning" class="alert alert-danger py-2 px-3 small fw-bold mb-0 mt-2" style="display: none;">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i> <span id="doc_file_warning_text">The selected file exceeds the 1 MB limit!</span>
             </div>
         </div>
     </div>
@@ -1959,6 +2167,128 @@ document.addEventListener('DOMContentLoaded', function() {
                         return false;
                     }
                 }
+            }
+
+            // Also check attached single document size strictly under 1 MB
+            const docInput = document.getElementById('proposal_document');
+            if (docInput && docInput.files && docInput.files.length > 0) {
+                const maxBytes = 1048576; // 1 MB
+                if (docInput.files.length > 1) {
+                    e.preventDefault();
+                    alert('Only one document can be attached to the proposal. Please select only a single file.');
+                    docInput.focus();
+                    docInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return false;
+                }
+                const file = docInput.files[0];
+                if (file.size > maxBytes) {
+                    e.preventDefault();
+                    const sizeKb = (file.size / 1024).toFixed(1);
+                    alert(`The attached document "${file.name}" (${sizeKb} KB) exceeds the 1 MB size limit.\n\nPlease attach a document strictly under 1 MB.`);
+                    docInput.focus();
+                    docInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return false;
+                }
+            }
+        });
+    }
+
+    // G. Document upload size validation and preview (Strictly Single Document, Max 1 MB)
+    window.clearSelectedProposalDocuments = function() {
+        const docInput = document.getElementById('proposal_document');
+        if (docInput) {
+            docInput.value = '';
+            docInput.classList.remove('is-invalid');
+        }
+        const container = document.getElementById('selected_files_list_container');
+        const list = document.getElementById('selected_files_list');
+        const warning = document.getElementById('doc_file_warning');
+        if (container) container.style.display = 'none';
+        if (list) list.innerHTML = '';
+        if (warning) warning.style.display = 'none';
+    };
+
+    const docInput = document.getElementById('proposal_document');
+    if (docInput) {
+        docInput.addEventListener('change', function() {
+            const warning = document.getElementById('doc_file_warning');
+            const warningText = document.getElementById('doc_file_warning_text');
+            const container = document.getElementById('selected_files_list_container');
+            const list = document.getElementById('selected_files_list');
+            const maxBytes = 1048576; // 1 MB
+
+            if (!this.files || this.files.length === 0) {
+                if (container) container.style.display = 'none';
+                if (warning) warning.style.display = 'none';
+                this.classList.remove('is-invalid');
+                return;
+            }
+
+            if (this.files.length > 1) {
+                alert('Only one document is allowed. Please choose only a single file.');
+                this.value = '';
+                this.classList.add('is-invalid');
+                if (container) container.style.display = 'none';
+                if (warning) {
+                    if (warningText) warningText.textContent = 'Only 1 file allowed! Multiple files were deselected.';
+                    warning.style.display = 'block';
+                }
+                return;
+            }
+
+            const f = this.files[0];
+            const sizeKb = (f.size / 1024).toFixed(1);
+            const sizeMb = (f.size / (1024 * 1024)).toFixed(2);
+            const displaySize = f.size >= 1048576 ? sizeMb + ' MB' : sizeKb + ' KB';
+            const isOver = f.size > maxBytes;
+            const ext = f.name.split('.').pop().toLowerCase();
+
+            let iconHtml = '<i class="bi bi-file-earmark-text text-secondary fs-4 me-2"></i>';
+            if (ext === 'pdf') {
+                iconHtml = '<i class="bi bi-file-earmark-pdf-fill text-danger fs-4 me-2"></i>';
+            } else if (['doc', 'docx'].includes(ext)) {
+                iconHtml = '<i class="bi bi-file-earmark-word-fill text-primary fs-4 me-2"></i>';
+            } else if (['xls', 'xlsx'].includes(ext)) {
+                iconHtml = '<i class="bi bi-file-earmark-excel-fill text-success fs-4 me-2"></i>';
+            } else if (['png', 'jpg', 'jpeg'].includes(ext)) {
+                iconHtml = '<i class="bi bi-file-earmark-image-fill text-info fs-4 me-2"></i>';
+            }
+
+            const itemHtml = `
+                <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 ${isOver ? 'bg-danger-subtle border-danger' : 'bg-white'}">
+                    <div class="d-flex align-items-center text-truncate me-2">
+                        ${iconHtml}
+                        <div>
+                            <div class="fw-semibold text-dark small text-truncate" style="max-width: 420px;" title="${f.name}">${f.name}</div>
+                            <div class="extra-small text-muted">${displaySize} &middot; .${ext.toUpperCase()}</div>
+                        </div>
+                    </div>
+                    <div>
+                        ${isOver 
+                            ? '<span class="badge bg-danger text-white"><i class="bi bi-exclamation-triangle-fill me-1"></i>Exceeds 1 MB limit</span>' 
+                            : '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle me-1"></i>Under 1 MB</span>'
+                        }
+                    </div>
+                </div>
+            `;
+
+            if (container && list) {
+                list.innerHTML = itemHtml;
+                container.style.display = 'block';
+            }
+
+            if (isOver) {
+                this.classList.add('is-invalid');
+                if (warning) {
+                    if (warningText) {
+                        warningText.textContent = `The selected file "${f.name}" (${displaySize}) exceeds the 1 MB limit. Please choose a file strictly under 1 MB.`;
+                    }
+                    warning.style.display = 'block';
+                }
+                alert(`Warning: The selected file "${f.name}" (${displaySize}) exceeds the 1 MB limit.\n\nPlease choose a document strictly under 1 MB.`);
+            } else {
+                this.classList.remove('is-invalid');
+                if (warning) warning.style.display = 'none';
             }
         });
     }

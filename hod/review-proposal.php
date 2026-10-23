@@ -212,6 +212,9 @@ include __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div class="d-flex gap-2">
+        <a href="#record-decision-section" class="btn btn-warning btn-sm fw-semibold text-dark">
+            <i class="bi bi-arrow-down-circle me-1"></i> Jump to Decision
+        </a>
         <a href="<?= url("/export-doc.php?id=" . ($id) . "") ?>" class="btn btn-outline-secondary btn-sm" title="Download Office Open XML Document (.docx)">
             <i class="bi bi-file-earmark-word me-1"></i> Export Word (.docx)
         </a>
@@ -227,47 +230,6 @@ include __DIR__ . '/../includes/header.php';
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
 <?php endif; ?>
-
-<!-- Scientist Resubmission Remarks / Response to Feedback Banner -->
-<?= render_scientist_remarks_box($proposal, $scientistRemarkData) ?>
-
-<!-- Review Decision Box at Top for Fast Action -->
-<div class="card shadow-sm border-0 mb-4" style="border-top: 4px solid #f59e0b !important;">
-    <div class="card-header bg-white py-3">
-        <h5 class="fw-bold text-dark m-0">
-            <i class="bi bi-pen-fill text-warning me-2"></i>
-            <?php if (($proposal['proposal_category'] ?? '') === 'ongoing'): ?>
-                Record HOD Progress Report Endorsement Decision
-            <?php elseif (($proposal['proposal_category'] ?? '') === 'completed'): ?>
-                Record HOD Completion Report Endorsement Decision
-            <?php else: ?>
-                Record HOD Review Decision
-            <?php endif; ?>
-        </h5>
-    </div>
-    <div class="card-body p-4">
-        <form method="POST" action="<?= url("/hod/review-proposal.php?id=" . ($id) . "") ?>">
-            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-
-            <div class="mb-3">
-                <label for="comments" class="form-label small fw-semibold text-secondary">
-                    Reviewer's Comments / Feedback / Endorsement Remarks:
-                </label>
-                <textarea id="comments" name="comments" class="form-control" rows="4" placeholder="Mandatory if returning for revisions. Enter technical observations, gap critiques, or budget recommendations..."></textarea>
-                <small class="text-muted">These comments will be permanently recorded in the proposal timeline and visible to the Scientist and Joint Director.</small>
-            </div>
-
-            <div class="d-flex flex-wrap gap-3 justify-content-end align-items-center pt-3 border-top">
-                <button type="submit" name="decision" value="return" class="btn btn-outline-danger fw-semibold" data-confirm="Are you sure you want to RETURN this submission to the Scientist for revision?">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision
-                </button>
-                <button type="submit" name="decision" value="forward" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Are you sure you want to ENDORSE and FORWARD this submission to the Joint Director?">
-                    <i class="bi bi-check2-circle me-1"></i> Endorse & Forward to Joint Director
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
 
 <!-- Proposal Details Summary -->
 <div class="row g-4">
@@ -534,27 +496,6 @@ include __DIR__ . '/../includes/header.php';
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
-
-                <!-- Complete Workflow Status History Log -->
-                <?php if (!empty($statusHistory)): ?>
-                    <div class="mt-4 pt-3 border-top">
-                        <h6 class="fw-bold text-dark mb-3"><i class="bi bi-clock-history text-secondary me-2"></i>Workflow Status History Log</h6>
-                        <div class="timeline ps-2">
-                            <?php foreach ($statusHistory as $h): ?>
-                                <div class="timeline-item pb-3 mb-2 border-start border-2 border-primary-subtle ps-3 position-relative">
-                                    <div class="d-flex justify-content-between align-items-baseline">
-                                        <strong class="small text-dark"><?= e($h['new_status']) ?></strong>
-                                        <span class="badge bg-light text-secondary border extra-small"><?= e($h['action_by_role']) ?></span>
-                                    </div>
-                                    <?php if (!empty($h['comments'])): ?>
-                                        <div class="small text-secondary mt-1 fst-italic">"<?= e($h['comments']) ?>"</div>
-                                    <?php endif; ?>
-                                    <small class="text-muted extra-small d-block mt-1"><?= format_datetime($h['created_at']) ?></small>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -684,6 +625,44 @@ include __DIR__ . '/../includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Record HOD Review Decision (Positioned at bottom so HOD can review the entire proposal first) -->
+<div class="card shadow-sm border-0 mt-4 mb-4" id="record-decision-section" style="border-top: 4px solid #f59e0b !important;">
+    <div class="card-header bg-white py-3">
+        <h5 class="fw-bold text-dark m-0">
+            <i class="bi bi-pen-fill text-warning me-2"></i>
+            <?php if (($proposal['proposal_category'] ?? '') === 'ongoing'): ?>
+                Record HOD Progress Report Endorsement Decision
+            <?php elseif (($proposal['proposal_category'] ?? '') === 'completed'): ?>
+                Record HOD Completion Report Endorsement Decision
+            <?php else: ?>
+                Record HOD Review Decision
+            <?php endif; ?>
+        </h5>
+    </div>
+    <div class="card-body p-4">
+        <form method="POST" action="<?= url("/hod/review-proposal.php?id=" . ($id) . "") ?>">
+            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+
+            <div class="mb-3">
+                <label for="comments" class="form-label small fw-semibold text-secondary">
+                    Reviewer's Comments / Feedback / Endorsement Remarks:
+                </label>
+                <textarea id="comments" name="comments" class="form-control" rows="4" placeholder="Mandatory if returning for revisions. Enter technical observations, gap critiques, or budget recommendations..."></textarea>
+                <small class="text-muted">These comments will be permanently recorded in the proposal timeline and visible to the Scientist and Joint Director.</small>
+            </div>
+
+            <div class="d-flex flex-wrap gap-3 justify-content-end align-items-center pt-3 border-top">
+                <button type="submit" name="decision" value="return" class="btn btn-outline-danger fw-semibold" data-confirm="Are you sure you want to RETURN this submission to the Scientist for revision?">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision
+                </button>
+                <button type="submit" name="decision" value="forward" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" data-confirm="Are you sure you want to ENDORSE and FORWARD this submission to the Joint Director?">
+                    <i class="bi bi-check2-circle me-1"></i> Endorse & Forward to Joint Director
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
