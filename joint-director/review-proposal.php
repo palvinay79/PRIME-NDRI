@@ -381,7 +381,7 @@ include __DIR__ . '/../includes/header.php';
                         <div class="mb-3">
                             <strong class="small text-muted text-uppercase d-block mb-1">Technical Program Proposed (objective wise, also indicate the role of Co Pis):</strong>
                             <div class="bg-light p-3 rounded rich-text-preview small">
-                                <?= render_rich_text(clean_multiline_text($proposal['technical_program'])) ?>
+                                <?= render_rich_text($proposal['technical_program']) ?>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -389,7 +389,9 @@ include __DIR__ . '/../includes/header.php';
                     <?php if (!empty($proposal['expected_outcomes'])): ?>
                         <div class="mb-3">
                             <strong class="small text-muted text-uppercase d-block mb-1">Expected Deliverables:</strong>
-                            <p class="text-secondary small"><?= nl2br(e($proposal['expected_outcomes'])) ?></p>
+                            <div class="bg-light p-3 rounded rich-text-preview small">
+                                <?= render_rich_text($proposal['expected_outcomes']) ?>
+                            </div>
                         </div>
                     <?php endif; ?>
                 </div>

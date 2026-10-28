@@ -1160,7 +1160,7 @@ include __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <strong class="small text-muted text-uppercase d-block mb-1">Technical Program Proposed (objective wise, also indicate the role of Co Pis):</strong>
                         <div class="bg-light p-3 rounded text-secondary small" style="line-height: 1.6; word-break: break-word;">
-                            <?= render_rich_text(clean_multiline_text($proposal['technical_program'])) ?>
+                            <?= render_rich_text($proposal['technical_program']) ?>
                         </div>
                     </div>
                     <?php endif; ?>

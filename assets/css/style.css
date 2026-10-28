@@ -336,21 +336,37 @@ body {
     margin-bottom: 0.35rem;
 }
 
+.rich-text-content figure.table {
+    margin: 1rem 0;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .rich-text-content table {
     width: 100%;
     margin-bottom: 1rem;
     border-collapse: collapse;
+    min-width: 520px;
 }
 
 .rich-text-content table th, .rich-text-content table td {
-    border: 1px solid #e2e8f0;
-    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    padding: 8px 10px;
     font-size: 0.88rem;
+    vertical-align: top;
+    line-height: 1.45;
 }
 
 .rich-text-content table th {
     background-color: #f1f5f9;
     font-weight: 600;
+    color: #1e293b;
+    border-bottom: 2px solid #94a3b8;
+}
+
+.rich-text-content table tr:nth-child(even) td {
+    background-color: #f8fafc;
 }
 
 /* Co-PI Card Styling */

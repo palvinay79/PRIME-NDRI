@@ -457,7 +457,7 @@ include __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="detail-section-body">
                     <div class="p-3 bg-light rounded border rich-text-preview">
-                        <?= render_rich_text(clean_multiline_text($proposal['technical_program'] ?? ''), 'None specified.') ?>
+                        <?= render_rich_text($proposal['technical_program'] ?? '', 'None specified.') ?>
                     </div>
                 </div>
             </div>
@@ -486,8 +486,10 @@ include __DIR__ . '/../includes/header.php';
                             <p class="small text-dark"><?= nl2br(e($proposal['justification_end_users'] ?: '-')) ?></p>
                         </div>
                         <div class="col-12">
-                            <strong class="d-block small text-muted text-uppercase">Expected Deliverables / Outcomes:</strong>
-                            <p class="small text-dark"><?= nl2br(e($proposal['expected_outcomes'] ?: '-')) ?></p>
+                            <strong class="d-block small text-muted text-uppercase mb-1">Expected Deliverables / Outcomes:</strong>
+                            <div class="p-3 bg-light rounded border rich-text-preview">
+                                <?= render_rich_text($proposal['expected_outcomes'] ?? '', 'None specified.') ?>
+                            </div>
                         </div>
                     </div>
                 </div>

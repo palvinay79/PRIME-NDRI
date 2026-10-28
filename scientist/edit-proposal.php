@@ -49,7 +49,13 @@ if (($proposal['proposal_category'] ?? '') === 'completed') {
 }
 
 if (!can_edit_proposal($proposal)) {
-    flash('danger', 'This proposal is locked and cannot be edited in its current workflow status.');
+    if ($proposal['current_status'] === STATUS_SUBMITTED_HOD) {
+        flash('warning', 'This proposal has been submitted to the Head of Department (HOD) and is currently under review. Editing is locked.');
+    } elseif ($proposal['current_status'] === STATUS_FORWARDED_JD) {
+        flash('warning', 'This proposal has been submitted/forwarded to the Joint Director (JDR) and is currently under review. Editing is locked.');
+    } else {
+        flash('danger', 'This proposal is locked and cannot be edited in its current workflow status (' . e($proposal['current_status']) . ').');
+    }
     header("Location: " . url("/scientist/proposal-details.php?id={$id}"));
     exit;
 }
@@ -134,10 +140,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $noveltyGap = sanitize($_POST['novelty_gap_analysis'] ?? '');
     $justification = sanitize($_POST['justification_end_users'] ?? '');
     $alignment = sanitize($_POST['institute_alignment'] ?? '');
-    $technicalProgram = clean_multiline_text($_POST['technical_program'] ?? '');
+    $technicalProgram = sanitize_html($_POST['technical_program'] ?? '');
     $objectives = sanitize_html($_POST['objectives'] ?? '');
     $methodology = null; // Methodology removed
-    $expectedOutcomes = sanitize($_POST['expected_outcomes'] ?? '');
+    $expectedOutcomes = sanitize_html($_POST['expected_outcomes'] ?? '');
     $startDate = !empty($_POST['proposed_start_date']) ? $_POST['proposed_start_date'] : null;
     $endDate = !empty($_POST['proposed_end_date']) ? $_POST['proposed_end_date'] : null;
     $budget = (float)($_POST['proposed_budget'] ?? 0);
@@ -260,11 +266,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Justification & End Users is mandatory.";
         } elseif (empty($alignment)) {
             $error = "Institute Alignment is mandatory.";
-        } elseif (empty($technicalProgram)) {
+        } elseif (empty(trim(strip_tags($technicalProgram)))) {
             $error = "Technical Program Proposed is mandatory.";
         } elseif (empty(trim(strip_tags($objectives)))) {
             $error = "Specific Objectives are mandatory.";
-        } elseif (empty($expectedOutcomes)) {
+        } elseif (empty(trim(strip_tags($expectedOutcomes)))) {
             $error = "Expected Outcomes & Deliverables are mandatory.";
         } elseif (empty($startDate) || empty($endDate)) {
             $error = "Both Proposed Start Date and End Date are mandatory.";
@@ -890,36 +896,42 @@ include __DIR__ . '/../includes/header.php';
 
                 <!-- 4: Technical Program Proposed - 250 words max -->
                 <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
                         <label class="form-label small fw-semibold text-secondary m-0">
                             Technical Program Proposed (objective wise, also indicate the role of Co-PIs) <span class="text-danger">*</span>
                         </label>
-                        <span id="technical_program_counter" class="badge bg-light text-primary border fw-semibold">
-                            <i class="bi bi-chat-left-text me-1"></i> 0 / 250 words
-                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-light text-primary border"><i class="bi bi-fonts me-1"></i>Rich Text Editor (CKEditor)</span>
+                            <span id="technical_program_counter" class="badge bg-light text-primary border fw-semibold">
+                                <i class="bi bi-chat-left-text me-1"></i> 0 / 250 words
+                            </span>
+                        </div>
                     </div>
-                    <textarea name="technical_program" id="technical_program" class="form-control" rows="6" placeholder="1. Work package or objective-wise milestones&#10;2. Specific activities & technical methodologies&#10;3. Explicit role and responsibilities of Co-PIs..." required oninput="updateFieldWordCount('technical_program', 250)"><?= e(clean_multiline_text($proposal['technical_program'] ?? '')) ?></textarea>
+                    <textarea name="technical_program" id="technical_program" class="form-control" rows="6" placeholder="1. Work package or objective-wise milestones&#10;2. Specific activities & technical methodologies&#10;3. Explicit role and responsibilities of Co-PIs..."><?= htmlspecialchars($proposal['technical_program'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
                     <div class="d-flex justify-content-between align-items-center mt-1">
-                        <div class="form-text text-muted extra-small">Objective-wise technical program, indicating the role of Co-PIs (max 250 words).</div>
+                        <div class="form-text text-muted extra-small">Objective-wise technical program, indicating the role of Co-PIs (strictly 250 words or less). Numbering, bullets &amp; tables supported.</div>
                         <div id="technical_program_warning" class="text-danger small fw-bold" style="display: none;">
-                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded!
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded! (Max 250 words)
                         </div>
                     </div>
                 </div>
 
                 <!-- Expected Outcomes & Deliverables - 40 words max -->
                 <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
                         <label class="form-label small fw-semibold text-secondary m-0">
                             Expected Outcomes & Deliverables <span class="text-danger">*</span>
                         </label>
-                        <span id="expected_outcomes_counter" class="badge bg-light text-primary border fw-semibold">
-                            <i class="bi bi-chat-left-text me-1"></i> 0 / 40 words
-                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-light text-primary border"><i class="bi bi-fonts me-1"></i>Rich Text Editor (CKEditor)</span>
+                            <span id="expected_outcomes_counter" class="badge bg-light text-primary border fw-semibold">
+                                <i class="bi bi-chat-left-text me-1"></i> 0 / 40 words
+                            </span>
+                        </div>
                     </div>
-                    <textarea name="expected_outcomes" id="expected_outcomes" class="form-control" rows="3" placeholder="Technologies, patentable formulations, research papers, high-yielding prototypes..." required oninput="updateFieldWordCount('expected_outcomes', 40)"><?= e($proposal['expected_outcomes'] ?? '') ?></textarea>
+                    <textarea name="expected_outcomes" id="expected_outcomes" class="form-control" rows="3" placeholder="Technologies, patentable formulations, research papers, high-yielding prototypes..."><?= htmlspecialchars($proposal['expected_outcomes'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
                     <div class="d-flex justify-content-between align-items-center mt-1">
-                        <div class="form-text text-muted extra-small">Specific measurable outcomes & deliverables (strictly 40 words or less).</div>
+                        <div class="form-text text-muted extra-small">Specific measurable outcomes & deliverables (strictly 40 words or less). Rich text formatting supported.</div>
                         <div id="expected_outcomes_warning" class="text-danger small fw-bold" style="display: none;">
                             <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded! (Max 40 words)
                         </div>
@@ -2017,8 +2029,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (notice) notice.style.display = 'block';
     }
 
-    // D. CKEditor 5 Initialization (Specific Objectives)
+    // D. CKEditor 5 Initialization (Specific Objectives, Technical Program Proposed, Expected Outcomes)
     let objectivesEditor = null;
+    let technicalProgramEditor = null;
+    let expectedOutcomesEditor = null;
 
     if (typeof ClassicEditor !== 'undefined') {
         const editorConfig = {
@@ -2038,9 +2052,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 .create(objEl, editorConfig)
                 .then(editor => {
                     objectivesEditor = editor;
+                    editor.model.document.on('change:data', () => {
+                        objEl.value = editor.getData();
+                    });
                 })
                 .catch(err => {
                     console.warn('CKEditor Objectives Init:', err);
+                });
+        }
+
+        const techEl = document.querySelector('#technical_program');
+        if (techEl) {
+            ClassicEditor
+                .create(techEl, editorConfig)
+                .then(editor => {
+                    technicalProgramEditor = editor;
+                    editor.model.document.on('change:data', () => {
+                        techEl.value = editor.getData();
+                        updateFieldWordCount('technical_program', 250);
+                    });
+                    setTimeout(() => updateFieldWordCount('technical_program', 250), 300);
+                })
+                .catch(err => {
+                    console.warn('CKEditor Technical Program Init:', err);
+                });
+        }
+
+        const eoEl = document.querySelector('#expected_outcomes');
+        if (eoEl) {
+            ClassicEditor
+                .create(eoEl, editorConfig)
+                .then(editor => {
+                    expectedOutcomesEditor = editor;
+                    editor.model.document.on('change:data', () => {
+                        eoEl.value = editor.getData();
+                        updateFieldWordCount('expected_outcomes', 40);
+                    });
+                    setTimeout(() => updateFieldWordCount('expected_outcomes', 40), 300);
+                })
+                .catch(err => {
+                    console.warn('CKEditor Expected Outcomes Init:', err);
                 });
         }
     }
@@ -2060,8 +2111,17 @@ document.addEventListener('DOMContentLoaded', function() {
     window.updateFieldWordCount = function(fieldId, maxWords) {
         const el = document.getElementById(fieldId);
         if (!el) return;
-        const text = el.value.trim();
-        const words = text.length > 0 ? text.split(/\s+/).length : 0;
+        let text = el.value || '';
+        // If content contains HTML from CKEditor, strip tags to count actual words
+        if (text.includes('<') && text.includes('>')) {
+            const temp = document.createElement('div');
+            temp.innerHTML = text;
+            text = (temp.textContent || temp.innerText || '').trim();
+        } else {
+            text = text.trim();
+        }
+        text = text.replace(/[\s\u00A0\u2000-\u200B]+/g, ' ').trim();
+        const words = text.length > 0 ? text.split(/\s+/).filter(w => w.length > 0).length : 0;
         const counter = document.getElementById(fieldId + '_counter');
         const warning = document.getElementById(fieldId + '_warning');
 
@@ -2087,26 +2147,18 @@ document.addEventListener('DOMContentLoaded', function() {
         updateFieldWordCount(id, WORD_LIMITS[id]);
     });
 
-    const techEl = document.getElementById('technical_program');
-    if (techEl) {
-        techEl.addEventListener('blur', function() {
-            this.value = this.value.replace(/^[\s\u00A0\u2000-\u200B]+/g, '');
-            updateFieldWordCount('technical_program', 250);
-        });
-    }
-
     // F. Form submission: Synchronize CKEditor data and validate word limits
     const form = document.getElementById('proposal-form');
     if (form) {
         form.addEventListener('submit', function(e) {
             if (objectivesEditor) {
-                const data = objectivesEditor.getData();
-                document.querySelector('#objectives').value = data;
+                document.querySelector('#objectives').value = objectivesEditor.getData();
             }
-
-            const techProg = document.getElementById('technical_program');
-            if (techProg && techProg.value) {
-                techProg.value = techProg.value.replace(/^[\s\u00A0\u2000-\u200B]+/g, '');
+            if (technicalProgramEditor) {
+                document.querySelector('#technical_program').value = technicalProgramEditor.getData();
+            }
+            if (expectedOutcomesEditor) {
+                document.querySelector('#expected_outcomes').value = expectedOutcomesEditor.getData();
             }
 
             const submitBtn = e.submitter || document.activeElement;
@@ -2157,11 +2209,18 @@ document.addEventListener('DOMContentLoaded', function() {
             for (const [fieldId, maxWords] of Object.entries(WORD_LIMITS)) {
                 const el = document.getElementById(fieldId);
                 if (el) {
-                    const text = el.value.trim();
-                    const words = text.length > 0 ? text.split(/\s+/).length : 0;
+                    let text = el.value || '';
+                    if (text.includes('<') && text.includes('>')) {
+                        const temp = document.createElement('div');
+                        temp.innerHTML = text;
+                        text = (temp.textContent || temp.innerText || '').trim();
+                    } else {
+                        text = text.trim();
+                    }
+                    text = text.replace(/[\s\u00A0\u2000-\u200B]+/g, ' ').trim();
+                    const words = text.length > 0 ? text.split(/\s+/).filter(w => w.length > 0).length : 0;
                     if (words > maxWords) {
                         e.preventDefault();
-                        el.focus();
                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         alert(`Word count limit exceeded for "${fieldId.replace(/_/g, ' ').toUpperCase()}".\nMaximum allowed: ${maxWords} words.\nCurrent word count: ${words} words.\n\nPlease shorten the content before submitting.`);
                         return false;

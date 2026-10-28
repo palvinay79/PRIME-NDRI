@@ -83,7 +83,7 @@ function clean_multiline_text(?string $input): string {
  */
 function sanitize_html(?string $input): string {
     if ($input === null) return '';
-    $allowedTags = '<p><br><strong><b><em><i><u><s><ul><ol><li><h1><h2><h3><h4><h5><h6><blockquote><table><thead><tbody><tr><th><td><span><sub><sup>';
+    $allowedTags = '<p><br><strong><b><em><i><u><s><ul><ol><li><h1><h2><h3><h4><h5><h6><blockquote><table><thead><tbody><tfoot><tr><th><td><span><sub><sup><figure><figcaption><colgroup><col>';
     $cleaned = strip_tags($input, $allowedTags);
     // Remove inline event handlers (onclick, onload, etc.) and unsafe attributes
     $cleaned = preg_replace('/<([a-z][a-z0-9]*)[^>]*?(\bon\w+)=("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '<$1', $cleaned);

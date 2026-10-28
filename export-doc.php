@@ -498,11 +498,11 @@ if ($cat === 'completed') {
     $builder->addSubHeading("Specific Objectives:");
     $builder->addRichText($proposal['objectives']);
     $builder->addSubHeading("Technical Program Proposed (objective-wise, indicating role of Co-PIs):");
-    $builder->addRichText(clean_multiline_text($proposal['technical_program'] ?? ''));
+    $builder->addRichText($proposal['technical_program'] ?? '');
 
     $builder->addHeading("7. EXPECTED OUTCOMES & BUDGET JUSTIFICATION");
     $builder->addSubHeading("Expected Deliverables & Outcomes:");
-    $builder->addParagraph($proposal['expected_outcomes']);
+    $builder->addRichText($proposal['expected_outcomes'] ?? '');
     $builder->addSubHeading("Financial & Budget Justification:");
     $builder->addParagraph($proposal['budget_justification']);
 }

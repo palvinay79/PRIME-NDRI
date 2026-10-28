@@ -22,18 +22,13 @@ function can_edit_proposal(array $proposal, ?int $userId = null): bool {
         return false;
     }
 
-    // Editable in Draft, Submitted to HOD (prior to HOD action), or Returned states
-    // For HOD, they can also edit their own submission in Forwarded to Joint Director before JD action
-    $userRole = current_user_role_id();
+    // Editable ONLY in Draft or Returned states (Returned by HOD / Returned by Joint Director for revision).
+    // If proposal is submitted to HOD or Joint Director (JDR), scientist editing is strictly locked.
     $editableStatuses = [
         STATUS_DRAFT,
-        STATUS_SUBMITTED_HOD,
         STATUS_RETURNED_HOD,
         STATUS_RETURNED_JD
     ];
-    if ($userRole === ROLE_HOD) {
-        $editableStatuses[] = STATUS_FORWARDED_JD;
-    }
 
     if (!in_array($proposal['current_status'], $editableStatuses, true)) {
         return false;
