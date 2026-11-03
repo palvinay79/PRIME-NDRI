@@ -1168,5 +1168,3 @@ function render_scientist_remarks_box(array $proposal, ?array $remarkData = null
 
     return $html;
 }
-
-

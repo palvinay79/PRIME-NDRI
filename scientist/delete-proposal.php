@@ -45,12 +45,16 @@ if ($userRole === ROLE_SCIENTIST && (int)$proposal['scientist_id'] !== $userId) 
 
 // Cannot delete if not allowed by workflow permissions
 if (!can_delete_proposal($proposal, $userId)) {
-    if (in_array($proposal['current_status'], [STATUS_FORWARDED_JD, STATUS_APPROVED_IRC, STATUS_PENDING_IRC], true)) {
-        flash('danger', "Cannot delete proposal '{$proposal['proposal_number']}': HOD has already forwarded this proposal to the Joint Director. Proposals can only be deleted before HOD takes action.");
+    if ($proposal['current_status'] === STATUS_SUBMITTED_HOD) {
+        flash('warning', "Cannot delete proposal '{$proposal['proposal_number']}': It has been submitted to the Head of Department (HOD) and is under review. Deletion is locked.");
+    } elseif ($proposal['current_status'] === STATUS_FORWARDED_JD) {
+        flash('warning', "Cannot delete proposal '{$proposal['proposal_number']}': It has been submitted/forwarded to the Joint Director (JDR) and is under review. Deletion is locked.");
+    } elseif (in_array($proposal['current_status'], [STATUS_APPROVED_IRC, STATUS_PENDING_IRC], true)) {
+        flash('danger', "Cannot delete proposal '{$proposal['proposal_number']}': This proposal has already been forwarded for IRC review. Deletion is locked.");
     } elseif ($proposal['current_status'] === STATUS_APPROVED_ACTIVE || $proposal['current_status'] === STATUS_COMPLETED) {
         flash('danger', "Active or completed research projects cannot be deleted.");
     } else {
-        flash('danger', "You do not have permission to delete this proposal in its current status ('" . e($proposal['current_status']) . "').");
+        flash('danger', "You do not have permission to delete this proposal in its current status ('" . e($proposal['current_status']) . "'). Only Draft proposals can be deleted.");
     }
     header("Location: " . url("/scientist/proposals.php"));
     exit;

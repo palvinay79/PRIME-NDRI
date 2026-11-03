@@ -40,7 +40,6 @@ function startPhpServer() {
   phpProcess.on("exit", (code, signal) => {
     console.log(`[PHP Server] Exited with code ${code}, signal ${signal}`);
     phpProcess = null;
-    // Auto-restart if server.ts is still running and not closing
     if (signal !== "SIGINT" && signal !== "SIGTERM") {
       console.log("[PHP Server] Restarting PHP server in 1 second...");
       setTimeout(() => {

@@ -435,11 +435,19 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Section 2: Proposals Slated for Final IRC Council Decision -->
 <div class="card shadow-sm border-0">
-    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+    <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h6 class="m-0 fw-bold text-dark">
             <i class="bi bi-award-fill text-primary me-2"></i>Stage 2: Approved for IRC Meeting - Final Council Decision Required
             <span class="badge bg-primary text-white ms-2"><?= count($ircProposals) ?></span>
         </h6>
+        <div class="d-flex align-items-center gap-2">
+            <a href="<?= url('/export-jdr-irc.php?type=new') ?>" class="btn btn-sm btn-outline-success fw-bold" title="Export new proposals slated for IRC meeting as JDR Word (.docx) document">
+                <i class="bi bi-file-earmark-word me-1"></i> Export JDR (.docx)
+            </a>
+            <a href="<?= url('/joint-director/irc-meetings.php') ?>" class="btn btn-sm btn-primary fw-semibold">
+                <i class="bi bi-calendar-event me-1"></i> IRC Meetings Portal
+            </a>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">

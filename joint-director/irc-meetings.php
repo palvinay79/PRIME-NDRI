@@ -76,6 +76,9 @@ include __DIR__ . '/../includes/header.php';
         <p class="text-muted small mb-0">Executive council proceedings, proposal deliberations, budget sanctions, and project code allocations</p>
     </div>
     <div class="d-flex gap-2">
+        <a href="<?= url('/export-jdr-irc.php?type=new') ?>" class="btn btn-primary btn-sm fw-bold shadow-sm" title="Export compiled JDR Word Document (.docx) for new proposals slated for IRC meeting">
+            <i class="bi bi-file-earmark-word-fill me-1"></i> Export JDR (.docx)
+        </a>
         <a href="<?= url("/joint-director/dashboard.php") ?>" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-speedometer2 me-1"></i> Executive Dashboard
         </a>
@@ -89,39 +92,70 @@ include __DIR__ . '/../includes/header.php';
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div>
-            <h5 class="fw-bold mb-0 text-dark">
-                <i class="bi bi-calendar-check-fill text-warning me-2"></i> Proposals Slated for IRC Meeting Deliberation (<?= count($filteredSlated) ?>)
-            </h5>
+            <div class="d-flex align-items-center gap-2">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-calendar-check-fill text-warning me-2"></i> Proposals Slated for IRC Meeting Deliberation (<?= count($filteredSlated) ?>)
+                </h5>
+            </div>
             <small class="text-muted">Proposals that have received initial screening approval and await formal council sanction</small>
         </div>
-        <!-- Filter Tabs for New vs Ongoing vs Completed -->
-        <ul class="nav nav-pills card-header-pills mb-0">
-            <li class="nav-item">
-                <a class="nav-link <?= $categoryFilter === 'all' ? 'active bg-primary' : 'text-secondary' ?> py-1 px-3 fw-semibold small" 
-                   href="<?= url("/joint-director/irc-meetings.php?category=all") ?>">
-                    <i class="bi bi-grid-fill me-1"></i> All Projects (<?= $countAll ?>)
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link <?= $categoryFilter === 'new' ? 'active bg-primary' : 'text-secondary' ?> py-1 px-3 fw-semibold small" 
-                   href="<?= url("/joint-director/irc-meetings.php?category=new") ?>">
-                    <i class="bi bi-file-earmark-plus me-1"></i> New Proposals (<?= $countNew ?>)
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link <?= $categoryFilter === 'ongoing' ? 'active bg-info text-dark fw-bold' : 'text-secondary' ?> py-1 px-3 fw-semibold small" 
-                   href="<?= url("/joint-director/irc-meetings.php?category=ongoing") ?>">
-                    <i class="bi bi-arrow-repeat me-1"></i> Progress Reports (<?= $countOngoing ?>)
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link <?= $categoryFilter === 'completed' ? 'active bg-success text-white' : 'text-secondary' ?> py-1 px-3 fw-semibold small" 
-                   href="<?= url("/joint-director/irc-meetings.php?category=completed") ?>">
-                    <i class="bi bi-journal-check me-1"></i> Completed Projects (<?= $countCompleted ?>)
-                </a>
-            </li>
-        </ul>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <a href="<?= url('/export-jdr-irc.php?type=new') ?>" class="btn btn-outline-success btn-sm fw-bold" title="Export compiled JDR Word (.docx) with proposals organized by Program A to F (In-House then Externally Funded)">
+                <i class="bi bi-file-earmark-word me-1"></i> Export JDR (.docx)
+            </a>
+            <!-- Filter Tabs for New vs Ongoing vs Completed -->
+            <ul class="nav nav-pills card-header-pills mb-0">
+                <li class="nav-item">
+                    <a class="nav-link <?= $categoryFilter === 'all' ? 'active bg-primary' : 'text-secondary' ?> py-1 px-3 fw-semibold small" 
+                       href="<?= url("/joint-director/irc-meetings.php?category=all") ?>">
+                        <i class="bi bi-grid-fill me-1"></i> All Projects (<?= $countAll ?>)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?= $categoryFilter === 'new' ? 'active bg-primary' : 'text-secondary' ?> py-1 px-3 fw-semibold small" 
+                       href="<?= url("/joint-director/irc-meetings.php?category=new") ?>">
+                        <i class="bi bi-file-earmark-plus me-1"></i> New Proposals (<?= $countNew ?>)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?= $categoryFilter === 'ongoing' ? 'active bg-info text-dark fw-bold' : 'text-secondary' ?> py-1 px-3 fw-semibold small" 
+                       href="<?= url("/joint-director/irc-meetings.php?category=ongoing") ?>">
+                        <i class="bi bi-arrow-repeat me-1"></i> Progress Reports (<?= $countOngoing ?>)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?= $categoryFilter === 'completed' ? 'active bg-success text-white' : 'text-secondary' ?> py-1 px-3 fw-semibold small" 
+                       href="<?= url("/joint-director/irc-meetings.php?category=completed") ?>">
+                        <i class="bi bi-journal-check me-1"></i> Completed Projects (<?= $countCompleted ?>)
+                    </a>
+                </li>
+            </ul>
+        </div>
     </div>
+
+    <!-- JDR Export Dossier Announcement Banner -->
+    <div class="p-3 bg-light border-bottom d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3">
+            <div class="p-2 rounded bg-primary text-white d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+                <i class="bi bi-file-earmark-word fs-5"></i>
+            </div>
+            <div>
+                <strong class="text-dark d-block">Official JDR Deliberation Dossier Export (.docx)</strong>
+                <span class="text-muted small">
+                    Export all new proposals slated for council deliberation formatted as a unified JDR dossier: first <strong>Program A</strong> (In-House New &rarr; Externally Funded New), then <strong>Program B</strong> (In-House &rarr; Externally Funded), through <strong>Program F</strong>.
+                </span>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <a href="<?= url('/export-jdr-irc.php?type=new&format=html') ?>" target="_blank" class="btn btn-outline-secondary btn-sm fw-semibold">
+                <i class="bi bi-eye me-1"></i> Preview HTML
+            </a>
+            <a href="<?= url('/export-jdr-irc.php?type=new') ?>" class="btn btn-success btn-sm fw-bold">
+                <i class="bi bi-download me-1"></i> Download JDR (.docx)
+            </a>
+        </div>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">

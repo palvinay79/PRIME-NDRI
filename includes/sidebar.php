@@ -183,7 +183,6 @@ if ($roleId === ROLE_SCIENTIST) {
                 <a href="<?= url('/joint-director/irc-meetings.php') ?>" class="nav-link-custom"><i class="bi bi-calendar-event"></i> IRC Meetings & Decisions</a>
                 <a href="<?= url('/joint-director/projects.php') ?>" class="nav-link-custom"><i class="bi bi-kanban"></i> Active Projects</a>
                 <a href="<?= url('/joint-director/analytics.php') ?>" class="nav-link-custom"><i class="bi bi-graph-up"></i> Research Analytics</a>
-                <a href="<?= url('/joint-director/clean-database.php') ?>" class="nav-link-custom text-danger"><i class="bi bi-trash3 me-2"></i> Clean Database <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1 font-monospace" style="font-size: 0.65rem;">Temp</span></a>
             <?php endif; ?>
             <hr>
             <a href="<?= url('/profile.php') ?>" class="nav-link-custom"><i class="bi bi-person-gear"></i> Profile</a>

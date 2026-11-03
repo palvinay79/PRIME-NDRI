@@ -44,7 +44,7 @@ $currentRoleId = current_user_role_id();
             </a>
         </div>
 
-        <div class="d-flex align-items-center gap-3">
+        <div class="d-flex align-items-center gap-2">
             <?php if (is_logged_in()): ?>
                 <div class="dropdown">
                     <button class="btn btn-sm btn-outline-light dropdown-toggle d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false">

@@ -94,16 +94,12 @@ function can_delete_proposal(array $proposal, ?int $userId = null): bool {
         return false;
     }
 
-    // For Scientist or HOD (owner): can delete ONLY until approval action is taken.
-    // Allowed statuses: Draft, Submitted to HOD (for scientists), Forwarded to JD (for HODs).
+    // For Scientist or HOD (owner): Deletion is strictly locked once submitted to HOD or Joint Director (JDR).
+    // Can delete ONLY while in Draft status. Once submitted to HOD or JDR, proposal deletion is prohibited.
     if ($userRole === ROLE_SCIENTIST || ($isOwner && $userRole !== ROLE_JOINT_DIRECTOR)) {
         $ownerDeletable = [
             STATUS_DRAFT,
-            STATUS_SUBMITTED_HOD,
         ];
-        if ($userRole === ROLE_HOD) {
-            $ownerDeletable[] = STATUS_FORWARDED_JD;
-        }
         if (!in_array($proposal['current_status'] ?? '', $ownerDeletable, true)) {
             return false;
         }

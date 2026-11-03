@@ -522,8 +522,11 @@ include __DIR__ . '/../includes/header.php';
         <p class="text-muted small mb-0">Record the official council consensus, grant sanction, and active project charter</p>
     </div>
     <div class="d-flex gap-2">
+        <a href="<?= url('/export-jdr-irc.php?type=new') ?>" class="btn btn-primary btn-sm fw-semibold" title="Export all new proposals slated for IRC meeting as a compiled JDR document in Word (.docx) format">
+            <i class="bi bi-file-earmark-word-fill me-1"></i> Export JDR Dossier (.docx)
+        </a>
         <a href="<?= url("/export-doc.php?id=" . ($id) . "") ?>" class="btn btn-outline-secondary btn-sm" title="Download Office Open XML Document (.docx)">
-            <i class="bi bi-file-earmark-word me-1"></i> Export Word (.docx)
+            <i class="bi bi-file-earmark-word me-1"></i> Export This Proposal (.docx)
         </a>
         <a href="<?= url("/joint-director/dashboard.php") ?>" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
@@ -540,10 +543,16 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Decision Form Box -->
 <div class="card shadow-sm border-0 mb-4" style="border-top: 4px solid #10b981 !important;">
-    <div class="card-header bg-white py-3">
+    <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h5 class="fw-bold text-dark m-0">
             <i class="bi bi-award-fill text-success me-2"></i>Record Official IRC Council Decision
         </h5>
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small">Meeting Agenda Dossier:</span>
+            <a href="<?= url('/export-jdr-irc.php?type=new') ?>" class="btn btn-sm btn-outline-success fw-bold" title="Export compiled JDR Word Document for all slated proposals">
+                <i class="bi bi-file-earmark-word me-1"></i> Export JDR (.docx)
+            </a>
+        </div>
     </div>
     <div class="card-body p-4">
         <form method="POST" action="<?= url("/joint-director/irc-decision.php?id=" . ($id) . "") ?>">

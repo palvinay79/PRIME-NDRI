@@ -87,6 +87,9 @@ include __DIR__ . '/../includes/header.php';
         <p class="text-muted small mb-0">Directorate screening and review portal for New Project Proposals, Biannual Progress Reports, and Completion Reports</p>
     </div>
     <div class="d-flex gap-2">
+        <a href="<?= url('/export-jdr-irc.php?type=new') ?>" class="btn btn-outline-success btn-sm fw-semibold" title="Export new proposals slated for IRC meeting as JDR Word (.docx)">
+            <i class="bi bi-file-earmark-word me-1"></i> Export JDR (.docx)
+        </a>
         <a href="<?= url('/joint-director/irc-meetings.php') ?>" class="btn btn-outline-primary btn-sm fw-semibold">
             <i class="bi bi-calendar-event me-1"></i> IRC Meetings & Decisions
         </a>
