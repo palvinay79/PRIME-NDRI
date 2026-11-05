@@ -97,7 +97,12 @@ class DocxBuilder {
     private string $body = '';
 
     private function escape(?string $str): string {
-        return htmlspecialchars((string)$str, ENT_XML1, 'UTF-8');
+        $decoded = html_entity_decode((string)$str, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return htmlspecialchars($decoded, ENT_XML1, 'UTF-8');
+    }
+
+    public function addPageBreak(): void {
+        $this->body .= '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
     }
 
     public function addTitle(string $mainTitle, string $subTitle = ''): void {
@@ -113,6 +118,12 @@ class DocxBuilder {
 
         // Horizontal line
         $this->body .= '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="16" w:space="8" w:color="1A365D"/></w:pBdr><w:spacing w:after="160"/></w:pPr></w:p>';
+    }
+
+    public function addProgramHeaderTopLeft(string $text): void {
+        $this->body .= '<w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="60" w:after="140"/><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="6" w:color="1A365D"/></w:pBdr></w:pPr>'
+            . '<w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1A365D"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+            . '<w:t xml:space="preserve">' . $this->escape($text) . '</w:t></w:r></w:p>';
     }
 
     public function addHeading(string $title): void {
@@ -333,9 +344,10 @@ class DocxBuilder {
 // Build Document Content
 $builder = new DocxBuilder();
 $cat = $proposal['proposal_category'] ?? 'new';
-$docSubTitle = ($cat === 'ongoing') ? "ONGOING PROJECT PROGRESS REPORT & DOSSIER" :
-               (($cat === 'completed') ? "COMPLETION PROJECT FINAL DOSSIER & REPORT" : "PROJECT PROPOSAL SUBMISSION & DOSSIER");
-$builder->addTitle("NATIONAL DAIRY RESEARCH INSTITUTE (NDRI PRIME)", $docSubTitle);
+$progKey = resolve_program_letter($proposal['institute_priority_area'] ?? '');
+
+// On top of proposal name: Remove "NDRI etc" and add Program A or B or C etc on top left
+$builder->addProgramHeaderTopLeft("PROGRAM " . $progKey);
 
 // Metadata Overview Table
 $metaMatrix = [
@@ -383,13 +395,32 @@ if (in_array($cat, ['ongoing', 'completed'])) {
     ];
 }
 
-$agencyDetails = get_funding_agency_details($proposal);
-$metaMatrix[] = [
-    ['text' => 'Funding Type / Agency:', 'bold' => true, 'bg' => 'F8FAFC'],
-    ['text' => $agencyDetails['is_external'] ? ($agencyDetails['agency_name'] . ' (' . $agencyDetails['agency_type'] . ')') : 'In-house Institute Funding', 'bold' => true],
-    ['text' => !empty($proposal['project_number']) ? 'Project Code:' : '', 'bold' => !empty($proposal['project_number']), 'bg' => !empty($proposal['project_number']) ? 'F8FAFC' : 'FFFFFF'],
-    ['text' => (string)($proposal['project_number'] ?? ''), 'bold' => !empty($proposal['project_number'])]
-];
+// Funding Agency: only show for externally funded projects. For in-house projects, it is covered in Project Category.
+$isExternal = (($proposal['project_type'] ?? '') === 'funding_agency');
+if ($isExternal) {
+    $agencyDetails = get_funding_agency_details($proposal);
+    $agencyName = trim($agencyDetails['agency_name'] ?? '');
+    if (!empty($agencyDetails['agency_type'])) {
+        $agencyName = $agencyName ? ($agencyName . ' (' . $agencyDetails['agency_type'] . ')') : $agencyDetails['agency_type'];
+    }
+    if (empty($agencyName)) {
+        $agencyName = 'External Funding Agency';
+    }
+
+    $metaMatrix[] = [
+        ['text' => 'Funding Agency:', 'bold' => true, 'bg' => 'F8FAFC'],
+        ['text' => $agencyName, 'bold' => true, 'color' => '1A365D'],
+        ['text' => !empty($proposal['project_number']) ? 'Project Code:' : '', 'bold' => !empty($proposal['project_number']), 'bg' => !empty($proposal['project_number']) ? 'F8FAFC' : 'FFFFFF'],
+        ['text' => (string)($proposal['project_number'] ?? ''), 'bold' => !empty($proposal['project_number'])]
+    ];
+} elseif (!empty($proposal['project_number'])) {
+    $metaMatrix[] = [
+        ['text' => 'Project Code:', 'bold' => true, 'bg' => 'F8FAFC'],
+        ['text' => (string)$proposal['project_number'], 'bold' => true, 'color' => '1A365D'],
+        ['text' => '', 'bg' => 'FFFFFF'],
+        ['text' => '']
+    ];
+}
 
 $builder->addMetaTable($metaMatrix);
 
@@ -535,67 +566,6 @@ if (!empty($documents)) {
         ];
     }
     $builder->addTable(["Document Name", "File Size", "Uploaded Date & Time"], $docRows);
-}
-
-// Head of Department (HOD) Comments & Joint Director (JDR) Comments at the end of the document
-$hodCommentText = '';
-$hodApprovedAt = '';
-$jdrCommentText = '';
-$jdrApprovedAt = '';
-
-if (!empty($history)) {
-    foreach ($history as $h) {
-        if (($h['action_by_role'] ?? '') === 'HOD' || str_contains($h['new_status'] ?? '', 'Pending Joint Director')) {
-            if (!empty($h['comments'])) {
-                $hodCommentText = $h['comments'];
-                $hodApprovedAt = format_datetime($h['created_at']);
-            }
-        }
-        if (($h['action_by_role'] ?? '') === 'Joint Director' || str_contains($h['new_status'] ?? '', 'Approved for IRC') || str_contains($h['new_status'] ?? '', 'Returned by Joint Director')) {
-            if (!empty($h['comments'])) {
-                $jdrCommentText = $h['comments'];
-                $jdrApprovedAt = format_datetime($h['created_at']);
-            }
-        }
-    }
-}
-
-$builder->addHeading("HEAD OF DEPARTMENT (HOD) COMMENTS & ENDORSEMENT");
-if (!empty($hodCommentText)) {
-    $builder->addParagraph("Endorsement Remarks: " . $hodCommentText);
-    if (!empty($hodApprovedAt)) {
-        $builder->addParagraph("Recorded on: " . $hodApprovedAt, false, '64748B');
-    }
-} else {
-    $builder->addParagraph("No written remarks entered by Head of Department.");
-}
-
-$builder->addHeading("JOINT DIRECTOR (RESEARCH) SCREENING DIRECTIVES & DECISION");
-if (!empty($jdrCommentText)) {
-    $builder->addParagraph("Directorate Observations: " . $jdrCommentText);
-    if (!empty($jdrApprovedAt)) {
-        $builder->addParagraph("Recorded on: " . $jdrApprovedAt, false, '64748B');
-    }
-} else {
-    $builder->addParagraph("No written directives entered by Joint Director.");
-}
-
-// Proposal Workflow History
-$builder->addHeading("PROPOSAL WORKFLOW & REVIEW HISTORY");
-if (!empty($history)) {
-    $histRows = [];
-    foreach ($history as $h) {
-        $histRows[] = [
-            format_datetime($h['created_at']),
-            $h['previous_status'] ?: 'Draft Initiated',
-            $h['new_status'] ?? '',
-            $h['action_by_role'] ?? '',
-            $h['comments'] ?: 'None'
-        ];
-    }
-    $builder->addTable(["Date & Time", "Previous Status", "New Status", "Role", "Comments / Remarks"], $histRows);
-} else {
-    $builder->addParagraph("No workflow history recorded yet.");
 }
 
 // Generate docx binary

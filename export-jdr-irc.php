@@ -12,7 +12,11 @@
  *   Program E : In-House New Proposals -> Externally Funded New Proposals
  *   Program F : In-House New Proposals -> Externally Funded New Proposals
  * 
- * Uses the exact same Word (.docx) design, typography, tables, and dossier layout as export-doc.php.
+ * Rules:
+ * - Omits any programs or sub-categories that have no proposals.
+ * - Each proposal starts cleanly at the top of a new page.
+ * - Workflow history table is excluded from the DOCX file.
+ * - Uses clean UTF-8 dashes and characters (no unparsed &mdash; or &bull; entities in Word XML).
  */
 
 require_once __DIR__ . '/config/database.php';
@@ -102,7 +106,7 @@ foreach ($proposals as &$p) {
     // Attach Co-PIs
     $p['copis'] = get_proposal_copis((int)$p['id'], (int)($p['linked_project_id'] ?? 0), (string)($p['project_number'] ?? ''));
     
-    // Attach review history
+    // Attach review history (for HOD / Joint Director remarks extraction)
     $stmtHist = $db->prepare("SELECT * FROM proposal_status_history WHERE proposal_id = ? ORDER BY created_at ASC");
     $stmtHist->execute([(int)$p['id']]);
     $p['history'] = $stmtHist->fetchAll(PDO::FETCH_ASSOC);
@@ -163,7 +167,11 @@ if ($format === 'html') {
             .prog-banner { background: #1a365d; color: #fff; padding: 12px 16px; font-size: 13pt; font-weight: bold; margin-top: 36px; margin-bottom: 16px; border-radius: 3px; }
             .subprog-title { background: #f1f5f9; color: #1a365d; padding: 8px 12px; font-size: 11.5pt; font-weight: bold; margin-top: 20px; border-left: 4px solid #1a365d; }
             .proposal-block { margin-top: 24px; margin-bottom: 32px; border-bottom: 1px solid #e2e8f0; padding-bottom: 24px; }
-            @media print { .no-print { display: none; } body { margin: 15mm; } }
+            @media print {
+                .no-print { display: none; }
+                body { margin: 15mm; }
+                .proposal-block { page-break-before: always; }
+            }
         </style>
     </head>
     <body>
@@ -174,9 +182,9 @@ if ($format === 'html') {
 
         <div class="header-box">
             <h1>NATIONAL DAIRY RESEARCH INSTITUTE (NDRI PRIME)</h1>
-            <h2>JOINT DIRECTOR (RESEARCH) &bull; IRC MEETING DELIBERATION DOSSIER</h2>
+            <h2>JOINT DIRECTOR (RESEARCH) — IRC MEETING DELIBERATION DOSSIER</h2>
             <p style="margin: 6px 0 0 0; color: #64748b; font-size: 10pt;">
-                Compilation of Slated New Research Proposals &bull; Programs A through F &bull; <?= date('F d, Y') ?>
+                Compilation of Slated New Research Proposals • <?= date('F d, Y') ?>
             </p>
         </div>
 
@@ -187,12 +195,19 @@ if ($format === 'html') {
             <div><strong>Total Proposed Outlay:</strong> <?= format_currency($totalBudgetCount) ?></div>
         </div>
 
-        <?php foreach ($programKeys as $pKey): ?>
-            <?php 
-                $pData = $organized[$pKey];
-                $inHouseCount = count($pData['in_house']);
-                $extCount = count($pData['external']);
-            ?>
+        <?php 
+        $hasAnyProgramWithProposals = false;
+        foreach ($programKeys as $pKey): 
+            $pData = $organized[$pKey];
+            $inHouseCount = count($pData['in_house']);
+            $extCount = count($pData['external']);
+
+            // Don't add if proposals are not there in program!
+            if ($inHouseCount === 0 && $extCount === 0) {
+                continue;
+            }
+            $hasAnyProgramWithProposals = true;
+        ?>
             <div class="prog-banner">
                 PROGRAM <?= $pKey ?>: <?= e(strtoupper($pData['name'])) ?>
                 <span style="float: right; font-size: 10pt; font-weight: normal; opacity: 0.9;">
@@ -200,14 +215,13 @@ if ($format === 'html') {
                 </span>
             </div>
 
-            <!-- In-House First -->
-            <div class="subprog-title">PROGRAM <?= $pKey ?> &mdash; IN-HOUSE NEW PROPOSALS (<?= $inHouseCount ?>)</div>
-            <?php if (empty($pData['in_house'])): ?>
-                <p style="color: #64748b; font-style: italic; margin: 12px 0;">No in-house new proposals slated under Program <?= $pKey ?> for this session.</p>
-            <?php else: ?>
+            <!-- In-House (only if present) -->
+            <?php if ($inHouseCount > 0): ?>
+                <div class="subprog-title">PROGRAM <?= $pKey ?> — IN-HOUSE NEW PROPOSALS (<?= $inHouseCount ?>)</div>
                 <?php foreach ($pData['in_house'] as $p): ?>
                     <div class="proposal-block">
-                        <h3><?= e($p['proposal_number']) ?> &mdash; <?= e($p['title']) ?></h3>
+                        <div style="font-size: 13pt; font-weight: bold; color: #1a365d; text-align: left; margin-bottom: 6px; border-bottom: 2px solid #1a365d; padding-bottom: 2px;">PROGRAM <?= $pKey ?></div>
+                        <h3><?= e($p['proposal_number']) ?> — <?= e($p['title']) ?></h3>
                         <table>
                             <tr>
                                 <th style="width: 25%;">Proposal Number:</th><td><?= e($p['proposal_number']) ?></td>
@@ -230,8 +244,7 @@ if ($format === 'html') {
                                 <th>Project Category:</th><td><strong>In-house Project</strong></td>
                             </tr>
                             <tr>
-                                <th>Funding Type / Agency:</th><td>In-house Institute Funding</td>
-                                <th>Priority Program:</th><td>Program <?= $pKey ?> &mdash; <?= e($pData['name']) ?></td>
+                                <th>Priority Program:</th><td colspan="3">Program <?= $pKey ?> — <?= e($pData['name']) ?></td>
                             </tr>
                         </table>
 
@@ -273,18 +286,17 @@ if ($format === 'html') {
                 <?php endforeach; ?>
             <?php endif; ?>
 
-            <!-- Externally Funded Next -->
-            <div class="subprog-title">PROGRAM <?= $pKey ?> &mdash; EXTERNALLY FUNDED NEW PROPOSALS (<?= $extCount ?>)</div>
-            <?php if (empty($pData['external'])): ?>
-                <p style="color: #64748b; font-style: italic; margin: 12px 0;">No externally funded new proposals slated under Program <?= $pKey ?> for this session.</p>
-            <?php else: ?>
+            <!-- Externally Funded (only if present) -->
+            <?php if ($extCount > 0): ?>
+                <div class="subprog-title">PROGRAM <?= $pKey ?> — EXTERNALLY FUNDED NEW PROPOSALS (<?= $extCount ?>)</div>
                 <?php foreach ($pData['external'] as $p): ?>
                     <?php 
                         $agencyDetails = get_funding_agency_details($p);
-                        $agencyText = $agencyDetails['agency_name'] . ' (' . $agencyDetails['agency_type'] . ')';
+                        $agencyText = $agencyDetails['agency_name'] . (!empty($agencyDetails['agency_type']) ? ' (' . $agencyDetails['agency_type'] . ')' : '');
                     ?>
                     <div class="proposal-block">
-                        <h3><?= e($p['proposal_number']) ?> &mdash; <?= e($p['title']) ?></h3>
+                        <div style="font-size: 13pt; font-weight: bold; color: #1a365d; text-align: left; margin-bottom: 6px; border-bottom: 2px solid #1a365d; padding-bottom: 2px;">PROGRAM <?= $pKey ?></div>
+                        <h3><?= e($p['proposal_number']) ?> — <?= e($p['title']) ?></h3>
                         <table>
                             <tr>
                                 <th style="width: 25%;">Proposal Number:</th><td><?= e($p['proposal_number']) ?></td>
@@ -307,8 +319,8 @@ if ($format === 'html') {
                                 <th>Project Category:</th><td><strong style="color: #4338ca;">Externally Funded Project</strong></td>
                             </tr>
                             <tr>
-                                <th>Funding Type / Agency:</th><td><strong><?= e($agencyText) ?></strong></td>
-                                <th>Priority Program:</th><td>Program <?= $pKey ?> &mdash; <?= e($pData['name']) ?></td>
+                                <th>Funding Agency:</th><td><strong><?= e($agencyText) ?></strong></td>
+                                <th>Priority Program:</th><td>Program <?= $pKey ?> — <?= e($pData['name']) ?></td>
                             </tr>
                         </table>
 
@@ -350,6 +362,12 @@ if ($format === 'html') {
                 <?php endforeach; ?>
             <?php endif; ?>
         <?php endforeach; ?>
+
+        <?php if (!$hasAnyProgramWithProposals): ?>
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 24px; text-align: center; color: #64748b; font-size: 11pt; margin-top: 24px;">
+                No new research proposals are currently slated for IRC Meeting Deliberation.
+            </div>
+        <?php endif; ?>
     </body>
     </html>
     <?php
@@ -363,7 +381,9 @@ class DocxBuilder {
     private string $body = '';
 
     private function escape(?string $str): string {
-        return htmlspecialchars((string)$str, ENT_XML1, 'UTF-8');
+        // Decode any leftover HTML entities (like &mdash;, &bull;, &ndash;) to real UTF-8 characters first
+        $decoded = html_entity_decode((string)$str, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return htmlspecialchars($decoded, ENT_XML1, 'UTF-8');
     }
 
     public function addPageBreak(): void {
@@ -383,6 +403,12 @@ class DocxBuilder {
 
         // Horizontal line
         $this->body .= '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="16" w:space="8" w:color="1A365D"/></w:pBdr><w:spacing w:after="160"/></w:pPr></w:p>';
+    }
+
+    public function addProgramHeaderTopLeft(string $text): void {
+        $this->body .= '<w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="60" w:after="140"/><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="6" w:color="1A365D"/></w:pBdr></w:pPr>'
+            . '<w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1A365D"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+            . '<w:t xml:space="preserve">' . $this->escape($text) . '</w:t></w:r></w:p>';
     }
 
     public function addHeading(string $title): void {
@@ -601,17 +627,14 @@ class DocxBuilder {
 
 /**
  * Renders a complete proposal dossier using the exact same structure and sections as export-doc.php
+ * Note: Workflow history table is intentionally excluded per user requirement.
  */
-function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, string $programHeaderInfo = ''): void {
+function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, string $programHeaderInfo = '', string $programLetter = ''): void {
     $cat = $proposal['proposal_category'] ?? 'new';
-    $docSubTitle = ($cat === 'ongoing') ? "ONGOING PROJECT PROGRESS REPORT & DOSSIER" :
-                   (($cat === 'completed') ? "COMPLETION PROJECT FINAL DOSSIER & REPORT" : "PROJECT PROPOSAL SUBMISSION & DOSSIER");
-    
-    if ($programHeaderInfo) {
-        $docSubTitle .= " (" . $programHeaderInfo . ")";
-    }
+    $progKey = !empty($programLetter) ? $programLetter : resolve_program_letter($proposal['institute_priority_area'] ?? '');
 
-    $builder->addTitle("NATIONAL DAIRY RESEARCH INSTITUTE (NDRI PRIME)", $docSubTitle);
+    // On top of proposal name: Remove "NDRI etc" and add Program A or B or C etc on top left
+    $builder->addProgramHeaderTopLeft("PROGRAM " . $progKey);
 
     // Metadata Overview Table
     $metaMatrix = [
@@ -659,13 +682,32 @@ function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, str
         ];
     }
 
-    $agencyDetails = get_funding_agency_details($proposal);
-    $metaMatrix[] = [
-        ['text' => 'Funding Type / Agency:', 'bold' => true, 'bg' => 'F8FAFC'],
-        ['text' => $agencyDetails['is_external'] ? ($agencyDetails['agency_name'] . ' (' . $agencyDetails['agency_type'] . ')') : 'In-house Institute Funding', 'bold' => true],
-        ['text' => !empty($proposal['project_number']) ? 'Project Code:' : '', 'bold' => !empty($proposal['project_number']), 'bg' => !empty($proposal['project_number']) ? 'F8FAFC' : 'FFFFFF'],
-        ['text' => (string)($proposal['project_number'] ?? ''), 'bold' => !empty($proposal['project_number'])]
-    ];
+    // Funding Agency: only show for externally funded projects. For in-house projects, it is covered in Project Category.
+    $isExternal = (($proposal['project_type'] ?? '') === 'funding_agency');
+    if ($isExternal) {
+        $agencyDetails = get_funding_agency_details($proposal);
+        $agencyName = trim($agencyDetails['agency_name'] ?? '');
+        if (!empty($agencyDetails['agency_type'])) {
+            $agencyName = $agencyName ? ($agencyName . ' (' . $agencyDetails['agency_type'] . ')') : $agencyDetails['agency_type'];
+        }
+        if (empty($agencyName)) {
+            $agencyName = 'External Funding Agency';
+        }
+
+        $metaMatrix[] = [
+            ['text' => 'Funding Agency:', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => $agencyName, 'bold' => true, 'color' => '1A365D'],
+            ['text' => !empty($proposal['project_number']) ? 'Project Code:' : '', 'bold' => !empty($proposal['project_number']), 'bg' => !empty($proposal['project_number']) ? 'F8FAFC' : 'FFFFFF'],
+            ['text' => (string)($proposal['project_number'] ?? ''), 'bold' => !empty($proposal['project_number'])]
+        ];
+    } elseif (!empty($proposal['project_number'])) {
+        $metaMatrix[] = [
+            ['text' => 'Project Code:', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => (string)$proposal['project_number'], 'bold' => true, 'color' => '1A365D'],
+            ['text' => '', 'bg' => 'FFFFFF'],
+            ['text' => '']
+        ];
+    }
 
     $builder->addMetaTable($metaMatrix);
 
@@ -776,68 +818,6 @@ function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, str
         }
         $builder->addTable(["Document Name", "File Size", "Uploaded Date & Time"], $docRows);
     }
-
-    // Head of Department (HOD) Comments & Joint Director (JDR) Comments at the end of the document
-    $hodCommentText = '';
-    $hodApprovedAt = '';
-    $jdrCommentText = '';
-    $jdrApprovedAt = '';
-
-    $history = $proposal['history'] ?? [];
-    if (!empty($history)) {
-        foreach ($history as $h) {
-            if (($h['action_by_role'] ?? '') === 'HOD' || str_contains($h['new_status'] ?? '', 'Pending Joint Director')) {
-                if (!empty($h['comments'])) {
-                    $hodCommentText = $h['comments'];
-                    $hodApprovedAt = format_datetime($h['created_at']);
-                }
-            }
-            if (($h['action_by_role'] ?? '') === 'Joint Director' || str_contains($h['new_status'] ?? '', 'Approved for IRC') || str_contains($h['new_status'] ?? '', 'Returned by Joint Director')) {
-                if (!empty($h['comments'])) {
-                    $jdrCommentText = $h['comments'];
-                    $jdrApprovedAt = format_datetime($h['created_at']);
-                }
-            }
-        }
-    }
-
-    $builder->addHeading("HEAD OF DEPARTMENT (HOD) COMMENTS & ENDORSEMENT");
-    if (!empty($hodCommentText)) {
-        $builder->addParagraph("Endorsement Remarks: " . $hodCommentText);
-        if (!empty($hodApprovedAt)) {
-            $builder->addParagraph("Recorded on: " . $hodApprovedAt, false, '64748B');
-        }
-    } else {
-        $builder->addParagraph("No written remarks entered by Head of Department.");
-    }
-
-    $builder->addHeading("JOINT DIRECTOR (RESEARCH) SCREENING DIRECTIVES & DECISION");
-    if (!empty($jdrCommentText)) {
-        $builder->addParagraph("Directorate Observations: " . $jdrCommentText);
-        if (!empty($jdrApprovedAt)) {
-            $builder->addParagraph("Recorded on: " . $jdrApprovedAt, false, '64748B');
-        }
-    } else {
-        $builder->addParagraph("No written directives entered by Joint Director.");
-    }
-
-    // Proposal Workflow History
-    $builder->addHeading("PROPOSAL WORKFLOW & REVIEW HISTORY");
-    if (!empty($history)) {
-        $histRows = [];
-        foreach ($history as $h) {
-            $histRows[] = [
-                format_datetime($h['created_at']),
-                $h['previous_status'] ?: 'Draft Initiated',
-                $h['new_status'] ?? '',
-                $h['action_by_role'] ?? '',
-                $h['comments'] ?: 'None'
-            ];
-        }
-        $builder->addTable(["Date & Time", "Previous Status", "New Status", "Role", "Comments / Remarks"], $histRows);
-    } else {
-        $builder->addParagraph("No workflow history recorded yet.");
-    }
 }
 
 // -------------------------------------------------------------------------
@@ -848,7 +828,7 @@ $builder = new DocxBuilder();
 // 1. Master Compilation Cover Header
 $builder->addTitle(
     "NATIONAL DAIRY RESEARCH INSTITUTE (NDRI PRIME)",
-    "JOINT DIRECTOR (RESEARCH) &bull; IRC MEETING DELIBERATION DOSSIER"
+    "JOINT DIRECTOR (RESEARCH) — IRC MEETING DELIBERATION DOSSIER"
 );
 
 $summaryMeta = [
@@ -879,8 +859,7 @@ $summaryMeta = [
 ];
 $builder->addMetaTable($summaryMeta);
 
-// 2. Program Breakdown Table (Programs A to F)
-$builder->addHeading("INSTITUTE PRIORITY PROGRAM ALLOCATION MATRIX (PROGRAMS A TO F)");
+// 2. Program Breakdown Table (Programs A to F) - only include programs with slated proposals!
 $matrixHeaders = ["Program", "Program Description", "In-House New", "Externally Funded", "Total Slated", "Proposed Outlay (INR)"];
 $matrixRows = [];
 
@@ -890,6 +869,11 @@ foreach ($programKeys as $pKey) {
     $exCount = count($pData['external']);
     $progTotal = $ihCount + $exCount;
     
+    // Don't add if proposals are not there in program!
+    if ($progTotal === 0) {
+        continue;
+    }
+
     $progBudget = 0.0;
     foreach ($pData['in_house'] as $p) $progBudget += (float)$p['proposed_budget'];
     foreach ($pData['external'] as $p) $progBudget += (float)$p['proposed_budget'];
@@ -903,93 +887,97 @@ foreach ($programKeys as $pKey) {
         format_currency($progBudget)
     ];
 }
-$matrixRows[] = [
-    "TOTAL",
-    "All Slated Proposals (Programs A to F)",
-    (string)$totalInHouseCount,
-    (string)$totalExternalCount,
-    (string)$totalProposalsCount,
-    format_currency($totalBudgetCount)
-];
-$builder->addTable($matrixHeaders, $matrixRows);
 
-// 3. Agenda Index / Table of Contents
-$builder->addHeading("AGENDA INDEX OF SLATED NEW PROPOSALS");
-$indexHeaders = ["S.No.", "Program", "Funding Type", "Proposal Number", "Project Title", "Principal Investigator", "Division", "Budget (INR)"];
-$indexRows = [];
-$sNo = 1;
-
-foreach ($programKeys as $pKey) {
-    // In-House first
-    foreach ($organized[$pKey]['in_house'] as $p) {
-        $indexRows[] = [
-            (string)$sNo++,
-            "Program " . $pKey,
-            "In-House",
-            $p['proposal_number'],
-            $p['title'],
-            $p['scientist_name'],
-            $p['department_code'],
-            format_currency((float)$p['proposed_budget'])
-        ];
-    }
-    // Externally funded next
-    foreach ($organized[$pKey]['external'] as $p) {
-        $indexRows[] = [
-            (string)$sNo++,
-            "Program " . $pKey,
-            "External",
-            $p['proposal_number'],
-            $p['title'],
-            $p['scientist_name'],
-            $p['department_code'],
-            format_currency((float)$p['proposed_budget'])
-        ];
-    }
+if (!empty($matrixRows)) {
+    $builder->addHeading("INSTITUTE PRIORITY PROGRAM ALLOCATION MATRIX");
+    $matrixRows[] = [
+        "TOTAL",
+        "All Slated Proposals in Scheduled Programs",
+        (string)$totalInHouseCount,
+        (string)$totalExternalCount,
+        (string)$totalProposalsCount,
+        format_currency($totalBudgetCount)
+    ];
+    $builder->addTable($matrixHeaders, $matrixRows);
 }
-$builder->addTable($indexHeaders, $indexRows);
-$builder->addPageBreak();
+
+// 3. Agenda Index / Table of Contents (only if proposals exist)
+if ($totalProposalsCount > 0) {
+    $builder->addHeading("AGENDA INDEX OF SLATED NEW PROPOSALS");
+    $indexHeaders = ["S.No.", "Program", "Funding Type", "Proposal Number", "Project Title", "Principal Investigator", "Division", "Budget (INR)"];
+    $indexRows = [];
+    $sNo = 1;
+
+    foreach ($programKeys as $pKey) {
+        if (empty($organized[$pKey]['in_house']) && empty($organized[$pKey]['external'])) {
+            continue;
+        }
+        // In-House first
+        foreach ($organized[$pKey]['in_house'] as $p) {
+            $indexRows[] = [
+                (string)$sNo++,
+                "Program " . $pKey,
+                "In-House",
+                $p['proposal_number'],
+                $p['title'],
+                $p['scientist_name'],
+                $p['department_code'],
+                format_currency((float)$p['proposed_budget'])
+            ];
+        }
+        // Externally funded next
+        foreach ($organized[$pKey]['external'] as $p) {
+            $indexRows[] = [
+                (string)$sNo++,
+                "Program " . $pKey,
+                "External",
+                $p['proposal_number'],
+                $p['title'],
+                $p['scientist_name'],
+                $p['department_code'],
+                format_currency((float)$p['proposed_budget'])
+            ];
+        }
+    }
+    $builder->addTable($indexHeaders, $indexRows);
+} else {
+    $builder->addParagraph("No research project proposals are currently slated for IRC Meeting Deliberation.");
+}
 
 // 4. Sequential Compilation: Program A through Program F
-// For each program: In-House New Proposals first, then Externally Funded New Proposals
-$isFirstSection = true;
-
+// - Don't add if proposals are not there in program
+// - Each proposal starts from a brand new page on top in docx
 foreach ($programKeys as $pKey) {
     $pData = $organized[$pKey];
     $ihProps = $pData['in_house'];
     $exProps = $pData['external'];
 
-    // Program Section Title
-    $builder->addHeading("PROGRAM {$pKey}: " . strtoupper($pData['name']));
-    $builder->addParagraph("Total Proposals Slated in Program {$pKey}: " . (count($ihProps) + count($exProps)) . " (In-House New: " . count($ihProps) . ", Externally Funded New: " . count($exProps) . ")", true, '1A365D');
+    // Don't add if proposals are not there in program!
+    if (empty($ihProps) && empty($exProps)) {
+        continue;
+    }
 
     // -------------------------------------------------------------
-    // PART 1: In-House New Proposals for this Program
+    // PART 1: In-House New Proposals for this Program (only if present)
     // -------------------------------------------------------------
-    $builder->addSubHeading("PROGRAM {$pKey} &mdash; IN-HOUSE NEW PROPOSALS (" . count($ihProps) . ")");
-    
-    if (empty($ihProps)) {
-        $builder->addParagraph("No in-house new proposals slated under Program {$pKey} for this session.");
-    } else {
+    if (!empty($ihProps)) {
         foreach ($ihProps as $idx => $p) {
-            $contextText = "Program {$pKey} &bull; In-House New (" . ($idx + 1) . " of " . count($ihProps) . ")";
-            render_proposal_dossier_docx($builder, $p, $contextText);
+            // Proposal starts from new page on top in docx!
             $builder->addPageBreak();
+            $contextText = "Program {$pKey} — In-House New (" . ($idx + 1) . " of " . count($ihProps) . ")";
+            render_proposal_dossier_docx($builder, $p, $contextText, $pKey);
         }
     }
 
     // -------------------------------------------------------------
-    // PART 2: Externally Funded New Proposals for this Program
+    // PART 2: Externally Funded New Proposals for this Program (only if present)
     // -------------------------------------------------------------
-    $builder->addSubHeading("PROGRAM {$pKey} &mdash; EXTERNALLY FUNDED NEW PROPOSALS (" . count($exProps) . ")");
-
-    if (empty($exProps)) {
-        $builder->addParagraph("No externally funded new proposals slated under Program {$pKey} for this session.");
-    } else {
+    if (!empty($exProps)) {
         foreach ($exProps as $idx => $p) {
-            $contextText = "Program {$pKey} &bull; Externally Funded New (" . ($idx + 1) . " of " . count($exProps) . ")";
-            render_proposal_dossier_docx($builder, $p, $contextText);
+            // Proposal starts from new page on top in docx!
             $builder->addPageBreak();
+            $contextText = "Program {$pKey} — Externally Funded New (" . ($idx + 1) . " of " . count($exProps) . ")";
+            render_proposal_dossier_docx($builder, $p, $contextText, $pKey);
         }
     }
 }
