@@ -600,8 +600,11 @@ include __DIR__ . '/../includes/header.php';
         <div class="detail-section-body">
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold text-secondary">Division / Department</label>
-                    <input type="text" class="form-control bg-light" value="<?= e($proposal['department_name']) ?>" readonly>
+                    <label class="form-label small fw-semibold text-secondary">
+                        Division / Department <span class="badge bg-light text-secondary border ms-1"><i class="bi bi-lock-fill me-1"></i>Locked</span>
+                    </label>
+                    <input type="text" class="form-control bg-light text-dark fw-medium" value="<?= e($proposal['department_name']) ?>" readonly>
+                    <div class="form-text extra-small text-muted mt-1"><i class="bi bi-shield-lock-fill text-secondary me-1"></i>Division is locked to this proposal.</div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label small fw-semibold text-secondary">TRL Level (1-9)</label>
@@ -1457,7 +1460,7 @@ function syncYearlyBudgetInputs(totalYears) {
                                oninput="calculateTotalBudget()"
                                onchange="calculateTotalBudget()">
                     </div>
-                    <div class="form-text extra-small text-muted mt-1">${ord} Year capital & operational outlay.</div>
+                    <div class="form-text extra-small text-muted mt-1">${ord} Year operational outlay.</div>
                 </div>
             </div>
         `;

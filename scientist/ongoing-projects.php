@@ -763,8 +763,11 @@ include __DIR__ . '/../includes/header.php';
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold text-secondary">Division / Department</label>
-                    <input type="text" class="form-control bg-white" value="<?= e($selectedProject['department_name'] ?: $department['department_name']) ?>" readonly>
+                    <label class="form-label small fw-semibold text-secondary">
+                        Division / Department <span class="badge bg-light text-secondary border ms-1"><i class="bi bi-lock-fill me-1"></i>Locked</span>
+                    </label>
+                    <input type="text" class="form-control bg-light text-dark fw-medium" value="<?= e($selectedProject['department_name'] ?: $department['department_name']) ?>" readonly>
+                    <div class="form-text extra-small text-muted mt-1"><i class="bi bi-shield-lock-fill text-secondary me-1"></i>Division is locked to this project.</div>
                 </div>
 
                 <div class="col-md-4">

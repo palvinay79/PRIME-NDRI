@@ -187,8 +187,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fundingAgencyType = $dbProj['funding_agency_type'] ?: ($dbProj['prop_funding_agency_type'] ?? 'National');
         $yearlyBudget = $dbProj['yearly_budget'] ?: ($dbProj['prop_yearly_budget'] ?? null);
         $projectCode = ($projectType === 'in_house') ? ($dbProj['project_number'] ?: '') : '';
-        $title = !empty($_POST['title']) ? sanitize($_POST['title']) : ($dbProj['proposal_title'] ?: ($dbProj['title'] ?: 'Project ' . $dbProj['project_number']));
-        $deptId = !empty($_POST['department_id']) ? (int)$_POST['department_id'] : (int)$dbProj['department_id'];
+        // Division / Department is strictly locked to the project's recorded department
+        $deptId = (int)$dbProj['department_id'];
         
         $rawPriority = !empty($_POST['institute_priority_area']) ? trim(sanitize($_POST['institute_priority_area'])) : ($dbProj['institute_priority_area'] ?: 'A');
         if (preg_match('/^(PROGRAM\s*)?([A-F])/i', $rawPriority, $matches)) {
@@ -213,7 +213,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $yearlyBudget = null;
         $projectCode = trim(sanitize($_POST['project_number'] ?? ''));
         $title = sanitize($_POST['title'] ?? '');
-        $deptId = (int)($_POST['department_id'] ?? $department['id']);
+        // Division / Department is strictly locked to user's affiliated department
+        $deptId = (int)($currentUser['department_id'] ?: ($department['id'] ?? 1));
         
         $rawPriority = trim(sanitize($_POST['institute_priority_area'] ?? ''));
         if (preg_match('/^(PROGRAM\s*)?([A-F])/i', $rawPriority, $matches)) {
@@ -662,14 +663,12 @@ include __DIR__ . '/../includes/header.php';
                             <input type="text" class="form-control bg-light" value="<?= e($currentUser['name']) ?> (<?= e($currentUser['designation']) ?>)" readonly>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label small fw-semibold text-secondary">Division / Department <span class="text-danger">*</span></label>
-                            <select name="department_id" id="department_id" class="form-select" <?= !$selectedProject ? 'required' : '' ?>>
-                                <?php foreach ($allDepts as $d): ?>
-                                    <option value="<?= $d['id'] ?>" <?= (($deptId ?? 0) == $d['id'] || ($currentUser['department_id'] ?? 0) == $d['id']) ? 'selected' : '' ?>>
-                                        <?= e($d['department_name']) ?> (<?= e($d['department_code']) ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                            <label class="form-label small fw-semibold text-secondary">
+                                Division / Department <span class="badge bg-light text-secondary border ms-1"><i class="bi bi-lock-fill me-1"></i>Locked</span>
+                            </label>
+                            <input type="text" class="form-control bg-light text-dark fw-medium" value="<?= e($department['department_name']) ?> (<?= e($department['department_code']) ?>)" readonly>
+                            <input type="hidden" name="department_id" id="department_id" value="<?= (int)($department['id'] ?? ($currentUser['department_id'] ?? 1)) ?>">
+                            <div class="form-text extra-small text-muted mt-1"><i class="bi bi-shield-lock-fill text-secondary me-1"></i>Division is locked to your affiliated department.</div>
                         </div>
 
                         <div class="col-12">

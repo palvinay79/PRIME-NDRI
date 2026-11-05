@@ -58,7 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fundingAgencyType = 'National';
     }
     $title = sanitize($_POST['title'] ?? '');
-    $deptId = (int)($_POST['department_id'] ?? $department['id']);
+    // Division / Department is strictly locked to the user's primary affiliated department
+    $deptId = (int)($currentUser['department_id'] ?? $department['id']);
     $discipline = trim(sanitize($_POST['discipline'] ?? ''));
     $rawPriority = trim(sanitize($_POST['institute_priority_area'] ?? ''));
     if (preg_match('/^(PROGRAM\s*)?([A-F])/i', $rawPriority, $matches)) {
@@ -487,20 +488,19 @@ include __DIR__ . '/../includes/header.php';
                     <input type="text" class="form-control bg-light" value="<?= e($currentUser['name']) ?> (<?= e($currentUser['designation']) ?>)" readonly>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold text-secondary">Division / Department *</label>
-                    <select name="department_id" id="department_id" class="form-select" required onchange="handleDepartmentChange(this)">
-                        <?php foreach ($allDepts as $d): ?>
-                            <option value="<?= $d['id'] ?>" data-code="<?= e($d['department_code']) ?>" <?= (($deptId ?? $currentUser['department_id']) == $d['id']) ? 'selected' : '' ?>>
-                                <?= e($d['department_name']) ?> (<?= e($d['department_code']) ?>)
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <label class="form-label small fw-semibold text-secondary">
+                        Division / Department <span class="badge bg-light text-secondary border ms-1"><i class="bi bi-lock-fill me-1"></i>Locked</span>
+                    </label>
+                    <input type="text" class="form-control bg-light text-dark fw-medium" value="<?= e($department['department_name']) ?> (<?= e($department['department_code']) ?>)" readonly>
+                    <input type="hidden" name="department_id" id="department_id" value="<?= (int)$department['id'] ?>" data-code="<?= e($department['department_code']) ?>">
+                    <div class="form-text extra-small text-muted mt-1"><i class="bi bi-shield-lock-fill text-secondary me-1"></i>Division is locked to your affiliated department.</div>
                 </div>
                 <!-- Conditional Discipline for SRS and ERS Regional Stations -->
-                <div class="col-md-6" id="disciplineContainer" style="display: none;">
+                <?php $isSrsErsUser = in_array(strtoupper($department['department_code'] ?? ''), ['SRS', 'ERS']); ?>
+                <div class="col-md-6" id="disciplineContainer" style="display: <?= $isSrsErsUser ? 'block' : 'none' ?>;">
                     <label for="discipline" class="form-label small fw-semibold text-secondary">
                         <i class="bi bi-mortarboard text-primary me-1"></i> Discipline <span class="text-danger">*</span>
-                        <span class="badge bg-primary-subtle text-primary ms-1" style="font-size: 0.7rem;">Required for SRS / ERS</span>
+                        <span class="badge bg-primary-subtle text-primary ms-1" style="font-size: 0.7rem;">Required for <?= e($department['department_code']) ?></span>
                     </label>
                     <div class="input-group">
                         <span class="input-group-text bg-light text-muted"><i class="bi bi-mortarboard"></i></span>
@@ -1260,7 +1260,7 @@ function syncYearlyBudgetInputs(totalYears) {
                                oninput="calculateTotalBudget()"
                                onchange="calculateTotalBudget()">
                     </div>
-                    <div class="form-text extra-small text-muted mt-1">${ord} Year capital & operational outlay.</div>
+                    <div class="form-text extra-small text-muted mt-1">${ord} Year operational outlay.</div>
                 </div>
             </div>
         `;
@@ -1363,10 +1363,8 @@ function updateAgencyTypeUi() {
 }
 
 // --- 2. Department Change & Conditional Discipline (SRS / ERS) ---
-function handleDepartmentChange(deptSelect) {
-    if (!deptSelect) return;
-    const selectedOpt = deptSelect.options[deptSelect.selectedIndex];
-    const code = (selectedOpt ? (selectedOpt.getAttribute('data-code') || '') : '').toUpperCase().trim();
+function handleDepartmentChange(deptEl) {
+    const code = (deptEl ? (deptEl.getAttribute('data-code') || '') : '<?= strtoupper($department['department_code'] ?? '') ?>').toUpperCase().trim();
     const container = document.getElementById('disciplineContainer');
     const input = document.getElementById('discipline');
 
