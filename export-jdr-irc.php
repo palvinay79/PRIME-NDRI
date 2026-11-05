@@ -741,13 +741,13 @@ function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, str
     // Category-Specific Sections (New Proposals)
     if ($cat === 'completed') {
         $builder->addHeading("4. EXECUTIVE FINAL REPORT");
-        $builder->addParagraph($proposal['final_report'] ?? '');
+        $builder->addRichText($proposal['final_report'] ?? '');
         $builder->addHeading("5. SIGNIFICANT SCIENTIFIC ACHIEVEMENTS");
-        $builder->addParagraph($proposal['significant_achievements'] ?? '');
+        $builder->addRichText($proposal['significant_achievements'] ?? '');
         $builder->addHeading("6. ACTION TAKEN REPORT (ATR) ON PREVIOUS IRC RECOMMENDATIONS");
-        $builder->addParagraph($proposal['previous_irc_atr'] ?? '');
+        $builder->addRichText($proposal['previous_irc_atr'] ?? '');
         $builder->addHeading("7. DELIVERABLES, OUTPUT & OUTCOME");
-        $builder->addParagraph($proposal['output_outcome'] ?? '');
+        $builder->addRichText($proposal['output_outcome'] ?? '');
     } elseif ($cat === 'ongoing') {
         $builder->addHeading("4. BIANNUAL PROGRESS REPORT");
         if (!empty($proposal['progress_report_period'])) {

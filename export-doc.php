@@ -473,16 +473,16 @@ if ($cat === 'completed') {
     }
 
     $builder->addHeading("4. EXECUTIVE FINAL REPORT");
-    $builder->addParagraph($proposal['final_report']);
+    $builder->addRichText($proposal['final_report']);
 
     $builder->addHeading("5. SIGNIFICANT SCIENTIFIC ACHIEVEMENTS");
-    $builder->addParagraph($proposal['significant_achievements']);
+    $builder->addRichText($proposal['significant_achievements']);
 
     $builder->addHeading("6. ACTION TAKEN REPORT (ATR) ON PREVIOUS IRC RECOMMENDATIONS");
-    $builder->addParagraph($proposal['previous_irc_atr']);
+    $builder->addRichText($proposal['previous_irc_atr']);
 
     $builder->addHeading("7. DELIVERABLES, OUTPUT & OUTCOME");
-    $builder->addParagraph($proposal['output_outcome']);
+    $builder->addRichText($proposal['output_outcome']);
 
     if (!empty($proposal['other_details'])) {
         $builder->addHeading("8. OTHER DETAILS & REMARKS");

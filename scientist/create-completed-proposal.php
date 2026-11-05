@@ -83,36 +83,56 @@ $portalScientists = $db->query("
 ")->fetchAll();
 
 $error = null;
-$linkedProjectId = (int)($_GET['project_id'] ?? ($_POST['linked_project_id'] ?? 0));
-if ($linkedProjectId <= 0 && !empty($activeProjects) && empty($_POST)) {
+$editProposalId = (int)($_GET['id'] ?? ($_GET['edit_id'] ?? ($_POST['edit_id'] ?? ($_POST['proposal_id'] ?? 0))));
+$editProposal = null;
+$existingCopis = [];
+
+if ($editProposalId > 0) {
+    $stmtEdit = $db->prepare("
+        SELECT p.*, d.department_name, d.department_code
+        FROM proposals p
+        LEFT JOIN departments d ON p.department_id = d.id
+        WHERE p.id = ?
+    ");
+    $stmtEdit->execute([$editProposalId]);
+    $editProposal = $stmtEdit->fetch();
+
+    if ($editProposal) {
+        $existingCopis = get_proposal_copis($editProposalId);
+        $pageTitle = 'Edit Completion Project - ' . ($editProposal['proposal_number'] ?? '');
+    }
+}
+
+$linkedProjectId = (int)($editProposal['linked_project_id'] ?? ($_GET['project_id'] ?? ($_POST['linked_project_id'] ?? 0)));
+if ($linkedProjectId <= 0 && !empty($activeProjects) && empty($_POST) && !$editProposal) {
     $linkedProjectId = (int)$activeProjects[0]['id'];
 }
 $selectedProject = null;
-$projectType = 'in_house';
-$fundingAgency = '';
-$fundingAgencyType = 'National';
-$yearlyBudget = null;
-$institutePriority = '';
-$nationalPriority = '';
-$projectCode = '';
-$title = '';
-$startDate = '';
-$endDate = '';
-$achievements = '';
-$budgetAllocated = '';
-$budgetUtilized = '';
-$finalReport = '';
-$previousIrcAtr = '';
-$outputOutcome = '';
-$otherDetails = '';
-$trlLevel = 3;
-$extensionRequested = 0;
-$extendedEndDate = '';
-$additionalFundsRequested = 0.00;
-$extensionJustification = '';
+$projectType = $editProposal['project_type'] ?? 'in_house';
+$fundingAgency = $editProposal['funding_agency'] ?? '';
+$fundingAgencyType = $editProposal['funding_agency_type'] ?? 'National';
+$yearlyBudget = $editProposal['yearly_budget'] ?? null;
+$institutePriority = $editProposal['institute_priority_area'] ?? '';
+$nationalPriority = $editProposal['national_priority_area'] ?? '';
+$projectCode = $editProposal['project_number'] ?? '';
+$title = $editProposal['title'] ?? '';
+$startDate = $editProposal['proposed_start_date'] ?? '';
+$endDate = $editProposal['proposed_end_date'] ?? '';
+$achievements = $editProposal['significant_achievements'] ?? '';
+$budgetAllocated = $editProposal['budget_allocated'] ?? ($editProposal['proposed_budget'] ?? '');
+$budgetUtilized = isset($editProposal['budget_utilized']) && $editProposal['budget_utilized'] !== null ? $editProposal['budget_utilized'] : '';
+$finalReport = $editProposal['final_report'] ?? '';
+$previousIrcAtr = $editProposal['previous_irc_atr'] ?? '';
+$outputOutcome = $editProposal['output_outcome'] ?? '';
+$otherDetails = $editProposal['other_details'] ?? '';
+$trlLevel = (int)($editProposal['trl_level'] ?? 3);
+$extensionRequested = (int)($editProposal['extension_requested'] ?? 0);
+$extendedEndDate = $editProposal['extended_end_date'] ?? '';
+$additionalFundsRequested = (float)($editProposal['additional_funds_requested'] ?? 0.00);
+$extensionJustification = $editProposal['extension_justification'] ?? '';
 
-// Pre-fill from linked project if specified
-if ($linkedProjectId > 0) {
+// Pre-fill from linked project if specified and not already filled from edit draft
+if ($linkedProjectId > 0 && !$editProposal) {
     foreach ($activeProjects as $ap) {
         if ((int)$ap['id'] === $linkedProjectId) {
             $selectedProject = $ap;
@@ -232,11 +252,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $origObjectives = '';
     }
 
-    $achievements = sanitize($_POST['significant_achievements'] ?? '');
+    $achievements = sanitize_html($_POST['significant_achievements'] ?? '');
     $budgetUtilized = (float)($_POST['budget_utilized'] ?? 0);
-    $finalReport = trim(sanitize($_POST['final_report'] ?? ''));
-    $previousIrcAtr = sanitize($_POST['previous_irc_atr'] ?? '');
-    $outputOutcome = sanitize($_POST['output_outcome'] ?? '');
+    $finalReport = sanitize_html($_POST['final_report'] ?? '');
+    $previousIrcAtr = sanitize_html($_POST['previous_irc_atr'] ?? '');
+    $outputOutcome = sanitize_html($_POST['output_outcome'] ?? '');
     $otherDetails = sanitize($_POST['other_details'] ?? '');
 
     // Extension & Additional Funds
@@ -247,7 +267,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Word count check for Final Report (max 250 words)
     $cleanReportText = strip_tags($finalReport);
-    $wordCount = !empty($cleanReportText) ? count(preg_split('/\s+/', trim($cleanReportText))) : 0;
+    $cleanReportText = html_entity_decode($cleanReportText, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $cleanReportText = preg_replace('/[\s\u00A0\u2000-\u200B]+/u', ' ', $cleanReportText);
+    $cleanReportText = trim($cleanReportText);
+    $wordCount = !empty($cleanReportText) ? count(preg_split('/\s+/', $cleanReportText)) : 0;
 
     // Fetch target department code
     $effectiveDeptId = $deptId ?: (int)($currentUser['department_id'] ?: 1);
@@ -283,15 +306,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Sanctioned Budget Allocated is mandatory and must be greater than zero.";
         } elseif (!isset($_POST['budget_utilized']) || trim($_POST['budget_utilized']) === '') {
             $error = "Actual Budget Utilized is mandatory.";
-        } elseif (empty($achievements)) {
+        } elseif (empty(trim(strip_tags($achievements)))) {
             $error = "Significant Achievements are mandatory.";
-        } elseif (empty($finalReport)) {
+        } elseif (empty(trim(strip_tags($finalReport)))) {
             $error = "Final Report is mandatory.";
         } elseif ($wordCount > 250) {
             $error = "Final Report must be strictly 250 words or less. Current word count is " . $wordCount . " words.";
-        } elseif (empty($previousIrcAtr)) {
+        } elseif (empty(trim(strip_tags($previousIrcAtr)))) {
             $error = "Action Taken Report (ATR) on Recommendations of Previous IRC is mandatory (enter 'N/A' if not applicable).";
-        } elseif (empty($outputOutcome)) {
+        } elseif (empty(trim(strip_tags($outputOutcome)))) {
             $error = "Output / Outcome is mandatory.";
         } elseif (empty($otherDetails)) {
             $error = "Other Details field is mandatory (enter 'N/A' if not applicable).";
@@ -331,57 +354,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $db->beginTransaction();
 
-            $proposalNumber = generate_proposal_number($deptCode);
             $submittedAt = ($submissionAction === 'submit') ? date('Y-m-d H:i:s') : null;
             $now = date('Y-m-d H:i:s');
 
-            $sql = "INSERT INTO proposals (
-                proposal_number, project_type, funding_agency, funding_agency_type, proposal_category, project_number,
-                title, scientist_id, department_id, institute_priority_area, national_priority_area,
-                trl_level, proposed_start_date, proposed_end_date, significant_achievements,
-                proposed_budget, yearly_budget, budget_allocated, budget_utilized, final_report, previous_irc_atr,
-                output_outcome, other_details, submission_remarks, linked_project_id, extension_requested,
-                extended_end_date, additional_funds_requested, extension_justification,
-                objectives, current_status, submitted_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            if ($editProposalId > 0) {
+                $proposalId = $editProposalId;
+                $proposalNumber = $editProposal['proposal_number'] ?? generate_proposal_number($deptCode);
+                $stmtUpdate = $db->prepare("
+                    UPDATE proposals SET
+                        project_type = ?, funding_agency = ?, funding_agency_type = ?, proposal_category = 'completed', project_number = ?,
+                        title = ?, department_id = ?, institute_priority_area = ?, national_priority_area = ?,
+                        trl_level = ?, proposed_start_date = ?, proposed_end_date = ?, significant_achievements = ?,
+                        proposed_budget = ?, yearly_budget = ?, budget_allocated = ?, budget_utilized = ?, final_report = ?, previous_irc_atr = ?,
+                        output_outcome = ?, other_details = ?, submission_remarks = ?, linked_project_id = ?, extension_requested = ?,
+                        extended_end_date = ?, additional_funds_requested = ?, extension_justification = ?,
+                        current_status = ?, submitted_at = CASE WHEN ? IS NOT NULL THEN ? ELSE submitted_at END, updated_at = ?
+                    WHERE id = ?
+                ");
+                $stmtUpdate->execute([
+                    $projectType,
+                    ($projectType === 'funding_agency' ? $fundingAgency : null),
+                    ($projectType === 'funding_agency' ? $fundingAgencyType : 'National'),
+                    ($projectType === 'in_house' ? $projectCode : null),
+                    $title,
+                    $deptId,
+                    $institutePriority,
+                    $nationalPriority,
+                    $trlLevel,
+                    $startDate,
+                    $endDate,
+                    $achievements,
+                    $budgetAllocated,
+                    $yearlyBudget,
+                    $budgetAllocated,
+                    $budgetUtilized,
+                    $finalReport,
+                    $previousIrcAtr,
+                    $outputOutcome,
+                    $otherDetails,
+                    (!empty($submissionRemarks) ? $submissionRemarks : null),
+                    ($linkedProjectId > 0 ? $linkedProjectId : null),
+                    $extensionRequested,
+                    $extendedEndDate,
+                    $additionalFundsRequested,
+                    $extensionJustification,
+                    $targetStatus,
+                    $submittedAt,
+                    $submittedAt,
+                    $now,
+                    $proposalId
+                ]);
 
-            $stmt = $db->prepare($sql);
-            $stmt->execute([
-                $proposalNumber,
-                $projectType,
-                ($projectType === 'funding_agency' ? $fundingAgency : null),
-                ($projectType === 'funding_agency' ? $fundingAgencyType : 'National'),
-                ($projectType === 'in_house' ? $projectCode : null),
-                $title,
-                $userId,
-                $deptId,
-                $institutePriority,
-                $nationalPriority,
-                $trlLevel,
-                $startDate,
-                $endDate,
-                $achievements,
-                $budgetAllocated,
-                $yearlyBudget,
-                $budgetAllocated,
-                $budgetUtilized,
-                $finalReport,
-                $previousIrcAtr,
-                $outputOutcome,
-                $otherDetails,
-                (!empty($submissionRemarks) ? $submissionRemarks : null),
-                ($linkedProjectId > 0 ? $linkedProjectId : null),
-                $extensionRequested,
-                $extendedEndDate,
-                $additionalFundsRequested,
-                $extensionJustification,
-                $origObjectives,
-                $targetStatus,
-                $submittedAt,
-                $now,
-                $now
-            ]);
-            $proposalId = (int)$db->lastInsertId();
+                // Clear previous Co-PIs for re-insertion
+                $db->prepare("DELETE FROM proposal_co_pis WHERE proposal_id = ?")->execute([$proposalId]);
+            } else {
+                $proposalNumber = generate_proposal_number($deptCode);
+
+                $sql = "INSERT INTO proposals (
+                    proposal_number, project_type, funding_agency, funding_agency_type, proposal_category, project_number,
+                    title, scientist_id, department_id, institute_priority_area, national_priority_area,
+                    trl_level, proposed_start_date, proposed_end_date, significant_achievements,
+                    proposed_budget, yearly_budget, budget_allocated, budget_utilized, final_report, previous_irc_atr,
+                    output_outcome, other_details, submission_remarks, linked_project_id, extension_requested,
+                    extended_end_date, additional_funds_requested, extension_justification,
+                    objectives, current_status, submitted_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+                $stmt = $db->prepare($sql);
+                $stmt->execute([
+                    $proposalNumber,
+                    $projectType,
+                    ($projectType === 'funding_agency' ? $fundingAgency : null),
+                    ($projectType === 'funding_agency' ? $fundingAgencyType : 'National'),
+                    ($projectType === 'in_house' ? $projectCode : null),
+                    $title,
+                    $userId,
+                    $deptId,
+                    $institutePriority,
+                    $nationalPriority,
+                    $trlLevel,
+                    $startDate,
+                    $endDate,
+                    $achievements,
+                    $budgetAllocated,
+                    $yearlyBudget,
+                    $budgetAllocated,
+                    $budgetUtilized,
+                    $finalReport,
+                    $previousIrcAtr,
+                    $outputOutcome,
+                    $otherDetails,
+                    (!empty($submissionRemarks) ? $submissionRemarks : null),
+                    ($linkedProjectId > 0 ? $linkedProjectId : null),
+                    $extensionRequested,
+                    $extendedEndDate,
+                    $additionalFundsRequested,
+                    $extensionJustification,
+                    $origObjectives,
+                    $targetStatus,
+                    $submittedAt,
+                    $now,
+                    $now
+                ]);
+                $proposalId = (int)$db->lastInsertId();
+            }
 
             if (!empty($submissionRemarks)) {
                 add_proposal_comment($proposalId, $userId, 'Scientist Completion Submission', $submissionRemarks);
@@ -513,6 +589,7 @@ include __DIR__ . '/../includes/header.php';
 <form method="POST" action="<?= url("/scientist/create-completed-proposal.php") ?>" enctype="multipart/form-data" id="completed-proposal-form">
     <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
     <input type="hidden" name="submit_action" id="submit_action_hidden" value="draft">
+    <input type="hidden" name="edit_id" id="edit_id" value="<?= (int)($editProposalId ?? 0) ?>">
 
     <!-- Section 1: Project Identification & Selection -->
     <div class="detail-section-card">
@@ -630,20 +707,10 @@ include __DIR__ . '/../includes/header.php';
                                     </div>
                                 </div>
 
-                                <!-- Optional toggle to add additional completion collaborator -->
-                                <div class="mt-3">
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAdditionalCoPiSection()">
-                                        <i class="bi bi-person-plus me-1"></i> <span id="add-collaborator-toggle-text">+ Add Additional Collaborator / Co-PI for Completion</span>
-                                    </button>
-                                </div>
-                                <div id="additional-copi-wrapper" class="mt-3" style="display: none;">
-                                    <div class="p-3 bg-light rounded border">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <span class="small fw-bold text-dark"><i class="bi bi-person-plus-fill text-primary me-1"></i> Additional Completion Co-PIs</span>
-                                            <button type="button" onclick="addCoPiRow()" class="btn btn-xs btn-outline-primary" style="font-size: 0.8rem;">+ Add Row</button>
-                                        </div>
-                                        <div id="additional-copi-container"></div>
-                                    </div>
+                                <!-- Direct to unified Section 2 -->
+                                <div class="mt-3 p-2 bg-light rounded border text-muted small">
+                                    <i class="bi bi-info-circle-fill text-primary me-1"></i>
+                                    Project Associates (Co-PIs) are loaded below in <strong>Section 2</strong>. You can search, add, edit, or remove collaborators there.
                                 </div>
                             </div>
                         </div>
@@ -800,8 +867,8 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <!-- Section 2: Project Associates / Co-PIs (For Manual Entry) -->
-    <div class="detail-section-card" id="manual-copi-section" style="display: <?= $selectedProject ? 'none' : 'block' ?>;">
+    <!-- Section 2: Project Associates / Co-PIs -->
+    <div class="detail-section-card" id="copi-section">
         <div class="detail-section-header d-flex justify-content-between align-items-center">
             <div><i class="bi bi-people text-primary"></i> 2. Project Associates (Co-PIs)</div>
             <button type="button" id="add-copi-btn" onclick="addCoPiRow()" class="btn btn-sm btn-outline-primary fw-semibold" style="font-size: 0.82rem;">
@@ -810,10 +877,12 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="detail-section-body">
             <p class="text-muted small mb-3">
-                Select Co-Principal Investigators from NDRI faculty or add external collaborators who contributed to this completed project.
+                Select Co-Principal Investigators from NDRI portal faculty (division, designation, and email are automatically loaded), or select <strong>Other / External Institute Scientist</strong> to enter external collaborator details.
             </p>
-            <div id="copi-container"></div>
-            <div id="no-copi-notice" class="text-center p-3 border rounded bg-light text-muted small">
+            <div id="copi-container">
+                <!-- Dynamically generated Co-PI Cards -->
+            </div>
+            <div id="no-copi-notice" class="text-center p-3 border rounded bg-light text-muted small" style="display: none;">
                 <i class="bi bi-info-circle me-1 text-primary"></i> No Co-PIs added. Click <strong>"Add Co-PI"</strong> above if this project involved collaborators.
             </div>
         </div>
@@ -977,15 +1046,15 @@ include __DIR__ . '/../includes/header.php';
             <div class="row g-3">
                 <!-- Significant Achievements -->
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Significant Achievements <span class="text-danger">*</span></label>
-                    <textarea name="significant_achievements" class="form-control" rows="4" placeholder="Highlight key scientific breakthroughs, technologies developed, optimized protocols, patents, or germplasm evaluated..." required><?= e($achievements) ?></textarea>
+                    <label for="significant_achievements" class="form-label small fw-semibold text-secondary">Significant Achievements <span class="text-danger">*</span></label>
+                    <textarea name="significant_achievements" id="significant_achievements" class="form-control" rows="5" placeholder="Highlight key scientific breakthroughs, technologies developed, optimized protocols, patents, or germplasm evaluated..."><?= e($achievements) ?></textarea>
                     <div class="form-text text-muted extra-small">Detail the most significant scientific accomplishments achieved during the project tenure.</div>
                 </div>
 
                 <!-- Final Report (250 words only) -->
                 <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label small fw-bold text-dark m-0">
+                        <label for="final_report" class="form-label small fw-bold text-dark m-0">
                             Final Report (Maximum 250 Words) <span class="text-danger">*</span>
                         </label>
                         <span id="final_report_counter" class="badge bg-light text-primary border fw-semibold">
@@ -997,7 +1066,6 @@ include __DIR__ . '/../includes/header.php';
                               class="form-control font-monospace" 
                               rows="6" 
                               placeholder="Executive summary of the completed project (background, methodologies, major findings, and conclusions). Must not exceed 250 words..." 
-                              required 
                               oninput="updateWordCount()"><?= e($finalReport) ?></textarea>
                     <div class="d-flex justify-content-between align-items-center mt-1">
                         <div class="form-text text-muted extra-small">Strict 250-word executive summary for institutional records and IRC proceedings.</div>
@@ -1009,24 +1077,24 @@ include __DIR__ . '/../includes/header.php';
 
                 <!-- ATR on Recommendations made by the House in previous IRC if any -->
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">
+                    <label for="previous_irc_atr" class="form-label small fw-semibold text-secondary">
                         Action Taken Report (ATR) on Recommendations Made by the House in Previous IRC (if any) <span class="text-danger">*</span>
                     </label>
-                    <textarea name="previous_irc_atr" class="form-control" rows="3" placeholder="Provide point-wise Action Taken Report (ATR) addressing any recommendations, observations, or directives given by previous IRC meetings... (Enter 'N/A' if not applicable)" required><?= e($previousIrcAtr) ?></textarea>
+                    <textarea name="previous_irc_atr" id="previous_irc_atr" class="form-control" rows="4" placeholder="Provide point-wise Action Taken Report (ATR) addressing any recommendations, observations, or directives given by previous IRC meetings... (Enter 'N/A' if not applicable)"><?= e($previousIrcAtr) ?></textarea>
                     <div class="form-text text-muted extra-small">Specify action taken on previous council directives. If not applicable, mention 'N/A'.</div>
                 </div>
 
                 <!-- Output / Outcome -->
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Output / Outcome <span class="text-danger">*</span></label>
-                    <textarea name="output_outcome" class="form-control" rows="3" placeholder="List concrete research deliverables: publications (NAAS rated), technologies commercialized/transferred, prototypes, human resource trained, policy briefs..." required><?= e($outputOutcome) ?></textarea>
+                    <label for="output_outcome" class="form-label small fw-semibold text-secondary">Output / Outcome <span class="text-danger">*</span></label>
+                    <textarea name="output_outcome" id="output_outcome" class="form-control" rows="4" placeholder="List concrete research deliverables: publications (NAAS rated), technologies commercialized/transferred, prototypes, human resource trained, policy briefs..."><?= e($outputOutcome) ?></textarea>
                     <div class="form-text text-muted extra-small">Quantifiable deliverables and outcomes generated from this completed project.</div>
                 </div>
 
                 <!-- Other Details if any -->
                 <div class="col-12">
-                    <label class="form-label small fw-semibold text-secondary">Other Details (if any) <span class="text-danger">*</span></label>
-                    <textarea name="other_details" class="form-control" rows="2" placeholder="Any additional remarks, collaborations, external funding acknowledgments, or handover notes... (Enter 'N/A' if not applicable)" required><?= e($otherDetails) ?></textarea>
+                    <label for="other_details" class="form-label small fw-semibold text-secondary">Other Details (if any) <span class="text-danger">*</span></label>
+                    <textarea name="other_details" id="other_details" class="form-control" rows="2" placeholder="Any additional remarks, collaborations, external funding acknowledgments, or handover notes... (Enter 'N/A' if not applicable)" required><?= e($otherDetails) ?></textarea>
                     <div class="form-text text-muted extra-small">Any additional remarks. If not applicable, enter 'N/A'.</div>
                 </div>
 
@@ -1127,6 +1195,9 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </form>
 
+<!-- CKEditor 5 CDN -->
+<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/classic/ckeditor.js"></script>
+
 <script>
 // Portal scientists for Co-PIs
 const PORTAL_SCIENTISTS = <?= json_encode(array_map(function($s) {
@@ -1140,6 +1211,9 @@ const PORTAL_SCIENTISTS = <?= json_encode(array_map(function($s) {
         'institution' => 'NDRI, Karnal (' . ($s['department_name'] ?: 'General') . ')'
     ];
 }, $portalScientists)) ?>;
+
+// Existing Co-PIs for draft editing or pre-fills
+const EXISTING_COPIS = <?= json_encode($existingCopis) ?>;
 
 // Active projects in database for autofill
 const ACTIVE_PROJECTS = <?= json_encode(array_map(function($p) {
@@ -1174,7 +1248,6 @@ function handleDbProjectSelection(selectedVal) {
     const hiddenId = document.getElementById('linked_project_id');
     const dbCard = document.getElementById('db-project-info-card');
     const manualFields = document.getElementById('manual-project-fields-section');
-    const manualCopi = document.getElementById('manual-copi-section');
     const dbTimeline = document.getElementById('db-timeline-budget-summary');
     const manualTimeline = document.getElementById('manual-timeline-budget-inputs');
 
@@ -1195,7 +1268,6 @@ function handleDbProjectSelection(selectedVal) {
         hiddenId.value = '';
         if (dbCard) dbCard.style.display = 'none';
         if (manualFields) manualFields.style.display = 'block';
-        if (manualCopi) manualCopi.style.display = 'block';
         if (dbTimeline) dbTimeline.style.display = 'none';
         if (manualTimeline) manualTimeline.style.display = 'block';
 
@@ -1220,12 +1292,32 @@ function handleDbProjectSelection(selectedVal) {
 
     hiddenId.value = proj.id;
 
-    // Show Database Record card and hide manual entry blocks
+    // Show Database Record card and hide manual entry blocks (Co-PI section remains visible)
     if (dbCard) dbCard.style.display = 'block';
     if (manualFields) manualFields.style.display = 'none';
-    if (manualCopi) manualCopi.style.display = 'none';
     if (dbTimeline) dbTimeline.style.display = 'block';
     if (manualTimeline) manualTimeline.style.display = 'none';
+
+    // Populate Co-PIs into Section 2
+    const copiContainer = document.getElementById('copi-container');
+    const copiNotice = document.getElementById('no-copi-notice');
+    if (copiContainer) {
+        copiContainer.innerHTML = '';
+        copiIndex = 0;
+        if (proj.copis && proj.copis.length > 0) {
+            proj.copis.forEach(cp => {
+                addCoPiRow({
+                    name: cp.name || cp.co_pi_name || '',
+                    institution: cp.institution || '',
+                    designation: cp.designation || '',
+                    email: cp.email || ''
+                });
+            });
+            if (copiNotice) copiNotice.style.display = 'none';
+        } else {
+            if (copiNotice) copiNotice.style.display = 'block';
+        }
+    }
 
     // Populate Database Record card
     const cardNum = document.getElementById('db_card_project_number');
@@ -1538,9 +1630,17 @@ function calculateBudgetUtilization() {
 // Word count tracking for 250-word final report
 function updateWordCount() {
     const textInput = document.getElementById('final_report');
-    if (!textInput) return;
-    const text = textInput.value.trim();
-    const words = text.length > 0 ? text.split(/\s+/).length : 0;
+    if (!textInput) return 0;
+    let text = (typeof finalReportEditor !== 'undefined' && finalReportEditor) ? finalReportEditor.getData() : textInput.value;
+    if (text.includes('<') && text.includes('>')) {
+        const temp = document.createElement('div');
+        temp.innerHTML = text;
+        text = (temp.textContent || temp.innerText || '').trim();
+    } else {
+        text = text.trim();
+    }
+    text = text.replace(/[\s\u00A0\u2000-\u200B]+/g, ' ').trim();
+    const words = text.length > 0 ? text.split(/\s+/).filter(w => w.length > 0).length : 0;
     const counter = document.getElementById('final_report_counter');
     const warning = document.getElementById('word_limit_warning');
 
@@ -1558,122 +1658,515 @@ function updateWordCount() {
             if (warning) warning.style.display = 'none';
         }
     }
+    return words;
 }
 
-// Co-PI card handling
+// --- Co-PI Management (Searchable Combobox for 150+ Scientists + External) ---
 let copiIndex = 0;
-function addCoPiRow(targetContainerId = 'copi-container') {
-    let container = document.getElementById(targetContainerId);
-    if (!container) {
-        container = document.getElementById('copi-container') || document.getElementById('additional-copi-container');
-    }
+
+window.addCoPiRow = function(prefillData = null) {
+    const container = document.getElementById('copi-container');
+    const notice = document.getElementById('no-copi-notice');
     if (!container) return;
 
-    const notice = document.getElementById('no-copi-notice');
-    if (notice && targetContainerId === 'copi-container') notice.style.display = 'none';
+    const currentRows = container.querySelectorAll('.copi-card');
+    if (currentRows.length >= 15) {
+        alert('Maximum 15 Co-PIs allowed per proposal.');
+        return;
+    }
 
-    const curIdx = copiIndex++;
+    copiIndex++;
+    const rowId = `copi-card-${copiIndex}`;
     const card = document.createElement('div');
-    card.className = 'card mb-3 border border-secondary-subtle shadow-xs copi-card';
-    card.id = `copi-card-${curIdx}`;
+    card.className = 'card border mb-3 shadow-2xs copi-card bg-white';
+    card.id = rowId;
 
-    let scientistOptions = '<option value="">-- Choose NDRI Portal Scientist / Faculty --</option>';
+    // Build portal scientists options for hidden select compatibility
+    let portalOptions = '';
     PORTAL_SCIENTISTS.forEach(s => {
-        scientistOptions += `<option value="${s.id}" data-name="${escapeHtml(s.name)}" data-inst="${escapeHtml(s.institution)}" data-desig="${escapeHtml(s.designation)}" data-email="${escapeHtml(s.email)}">${escapeHtml(s.name)} (${escapeHtml(s.designation)} - ${escapeHtml(s.department)})</option>`;
+        const isSelected = (prefillData && prefillData.selectedId == s.id) ? 'selected' : '';
+        portalOptions += `<option value="${s.id}" ${isSelected} data-type="internal" data-name="${escapeHtml(s.name)}" data-inst="${escapeHtml(s.institution)}" data-desig="${escapeHtml(s.designation)}" data-email="${escapeHtml(s.email)}" data-dept="${escapeHtml(s.department)}">
+            ${escapeHtml(s.name)} — ${escapeHtml(s.department)} | ${escapeHtml(s.designation)} (${escapeHtml(s.email)})
+        </option>`;
     });
-    scientistOptions += `<option value="external" class="fw-bold text-primary">+ Other / External Collaborator</option>`;
+
+    const isExternalSelected = (prefillData && prefillData.isExternal) ? 'selected' : '';
 
     card.innerHTML = `
-        <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center">
-            <span class="small fw-bold text-dark"><i class="bi bi-person me-1"></i> Co-Principal Investigator</span>
-            <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeCoPiCard(${curIdx})">
+        <div class="card-header bg-light-subtle d-flex justify-content-between align-items-center py-2 px-3">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary text-white rounded-pill px-2">Co-PI #${copiIndex}</span>
+                <span class="copi-status-badge badge bg-secondary-subtle text-secondary border">Select Scientist</span>
+            </div>
+            <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeCoPiRow('${rowId}')" title="Remove Co-PI">
                 <i class="bi bi-trash me-1"></i> Remove
             </button>
         </div>
         <div class="card-body p-3">
-            <div class="row g-2">
-                <div class="col-12 mb-2">
-                    <label class="form-label extra-small text-muted mb-1">Select Scientist from Portal</label>
-                    <select class="form-select form-select-sm" id="copi-select-${curIdx}" onchange="onCoPiSelectChange(${curIdx})">
-                        ${scientistOptions}
-                    </select>
+            <div class="mb-3 copi-search-container position-relative">
+                <label class="form-label small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-person-search text-primary me-1"></i> Choose Scientist from NDRI Portal or External Institute:</span>
+                    <span class="badge bg-light text-muted border extra-small"><i class="bi bi-people me-1"></i>${PORTAL_SCIENTISTS.length} Scientists in Directory</span>
+                </label>
+                
+                <!-- Live Search Box with Filter & Browse -->
+                <div class="input-group">
+                    <span class="input-group-text bg-white text-primary"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control copi-search-input" 
+                           placeholder="Type scientist name or division to search (e.g. Sharma, Animal Nutrition)..." 
+                           autocomplete="off"
+                           onfocus="openCoPiDropdown('${rowId}')"
+                           oninput="filterCoPiDropdown('${rowId}', this.value)">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" 
+                            onclick="toggleCoPiDropdown('${rowId}')" title="Browse all scientists">
+                        <span class="d-none d-sm-inline small">Browse All</span>
+                    </button>
+                    <button class="btn btn-outline-danger btn-clear-search d-none" type="button" 
+                            onclick="clearCoPiSearch('${rowId}')" title="Clear selection">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
                 </div>
+
+                <!-- Hidden native select for standard form processing -->
+                <select class="form-select copi-select d-none" onchange="handleCoPiSelect(this, '${rowId}')">
+                    <option value="">-- Select Co-PI Scientist from NDRI Portal --</option>
+                    <optgroup label="NDRI Portal Scientists & HODs">
+                        ${portalOptions}
+                    </optgroup>
+                    <optgroup label="Other / External Institution">
+                        <option value="EXTERNAL" ${isExternalSelected} data-type="external">➕ Other / External Institute Scientist</option>
+                    </optgroup>
+                </select>
+
+                <!-- Custom Search Results Dropdown -->
+                <div class="dropdown-menu w-100 shadow-lg border copi-dropdown-results p-0 mt-1" 
+                     id="copi-results-${rowId}" 
+                     style="max-height: 290px; overflow-y: auto; display: none; z-index: 1050;">
+                    <div class="p-2 border-bottom bg-light d-flex justify-content-between align-items-center">
+                        <span class="extra-small text-muted search-count-text">
+                            <i class="bi bi-people me-1"></i> ${PORTAL_SCIENTISTS.length} Portal Scientists Available
+                        </span>
+                        <span class="badge bg-primary-subtle text-primary extra-small">Instant Live Filter</span>
+                    </div>
+                    <div class="list-group list-group-flush copi-list-group">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <div class="form-text text-muted extra-small mt-1">
+                    Start typing to instantly search through 150+ scientists by name, division, or designation, or choose "Other / External" for external collaborators.
+                </div>
+            </div>
+
+            <!-- Co-PI Detailed Input Fields -->
+            <div class="copi-fields-wrapper row g-2">
                 <div class="col-md-3">
-                    <label class="form-label extra-small text-muted mb-1">Co-PI Full Name *</label>
-                    <input type="text" name="copi_name[]" id="copi-name-${curIdx}" class="form-control form-control-sm" placeholder="Dr. ..." required>
+                    <label class="form-label extra-small text-muted mb-1">Co-PI Full Name <span class="text-danger">*</span></label>
+                    <input type="text" name="copi_name[]" class="form-control form-control-sm copi-name" placeholder="Scientist Name" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label extra-small text-muted mb-1">Institution / Division <span class="text-danger">*</span></label>
+                    <input type="text" name="copi_institution[]" class="form-control form-control-sm copi-institution" placeholder="Institution / Division Name" required>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label extra-small text-muted mb-1">Designation</label>
-                    <input type="text" name="copi_designation[]" id="copi-desig-${curIdx}" class="form-control form-control-sm" placeholder="e.g. Senior Scientist">
+                    <input type="text" name="copi_designation[]" class="form-control form-control-sm copi-designation" placeholder="e.g. Senior Scientist">
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label extra-small text-muted mb-1">Institution / Division *</label>
-                    <input type="text" name="copi_institution[]" id="copi-inst-${curIdx}" class="form-control form-control-sm" placeholder="e.g. Dairy Chemistry, NDRI" required>
-                </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label extra-small text-muted mb-1">Email Address</label>
-                    <input type="email" name="copi_email[]" id="copi-email-${curIdx}" class="form-control form-control-sm" placeholder="name@icar.org.in">
+                    <input type="email" name="copi_email[]" class="form-control form-control-sm copi-email" placeholder="name@icar.org.in">
+                </div>
+                <div class="col-12 mt-1">
+                    <div class="copi-meta-text text-muted extra-small"></div>
                 </div>
             </div>
         </div>
     `;
 
     container.appendChild(card);
-}
+    if (notice) notice.style.display = 'none';
 
-function onCoPiSelectChange(idx) {
-    const select = document.getElementById(`copi-select-${idx}`);
-    const selectedOpt = select.options[select.selectedIndex];
-    if (!selectedOpt || !selectedOpt.value) return;
+    // Handle pre-fill if given
+    if (prefillData) {
+        const select = card.querySelector('.copi-select');
+        let matched = null;
+        const testEmail = prefillData.email || prefillData.co_pi_email;
+        const testName = prefillData.name || prefillData.co_pi_name;
+        if (testEmail) {
+            matched = PORTAL_SCIENTISTS.find(s => s.email && s.email.toLowerCase() === testEmail.toLowerCase());
+        }
+        if (!matched && testName) {
+            matched = PORTAL_SCIENTISTS.find(s => s.name && s.name.toLowerCase() === testName.toLowerCase());
+        }
 
-    const nameInput = document.getElementById(`copi-name-${idx}`);
-    const desigInput = document.getElementById(`copi-desig-${idx}`);
-    const instInput = document.getElementById(`copi-inst-${idx}`);
-    const emailInput = document.getElementById(`copi-email-${idx}`);
-
-    if (selectedOpt.value === 'external') {
-        nameInput.value = '';
-        desigInput.value = '';
-        instInput.value = '';
-        emailInput.value = '';
-        nameInput.focus();
-    } else {
-        nameInput.value = selectedOpt.getAttribute('data-name') || '';
-        desigInput.value = selectedOpt.getAttribute('data-desig') || '';
-        instInput.value = selectedOpt.getAttribute('data-inst') || '';
-        emailInput.value = selectedOpt.getAttribute('data-email') || '';
+        if (matched) {
+            select.value = matched.id;
+            handleCoPiSelect(select, rowId);
+        } else {
+            select.value = 'EXTERNAL';
+            handleCoPiSelect(select, rowId, {
+                name: testName || '',
+                institution: prefillData.institution || '',
+                designation: prefillData.designation || '',
+                email: testEmail || ''
+            });
+        }
     }
-}
+};
 
-function removeCoPiCard(idx) {
-    const card = document.getElementById(`copi-card-${idx}`);
-    if (card) card.remove();
+window.removeCoPiRow = function(rowId) {
+    const card = document.getElementById(rowId);
+    if (card) {
+        card.remove();
+    }
     const container = document.getElementById('copi-container');
     const notice = document.getElementById('no-copi-notice');
-    if (container && container.children.length === 0 && notice) {
-        notice.style.display = 'block';
+    if (container && container.querySelectorAll('.copi-card').length === 0) {
+        if (notice) notice.style.display = 'block';
     }
+};
+
+window.removeCoPiCard = function(idx) {
+    removeCoPiRow('copi-card-' + idx);
+};
+
+window.openCoPiDropdown = function(rowId) {
+    const card = document.getElementById(rowId);
+    if (!card) return;
+    const input = card.querySelector('.copi-search-input');
+    const query = input ? input.value : '';
+    filterCoPiDropdown(rowId, query);
+};
+
+window.toggleCoPiDropdown = function(rowId) {
+    const menu = document.getElementById(`copi-results-${rowId}`);
+    if (menu && menu.style.display === 'block') {
+        menu.style.display = 'none';
+    } else {
+        filterCoPiDropdown(rowId, '');
+        const card = document.getElementById(rowId);
+        const input = card ? card.querySelector('.copi-search-input') : null;
+        if (input) input.focus();
+    }
+};
+
+window.clearCoPiSearch = function(rowId) {
+    const card = document.getElementById(rowId);
+    if (!card) return;
+    const select = card.querySelector('.copi-select');
+    if (select) {
+        select.value = '';
+        handleCoPiSelect(select, rowId);
+    }
+    const input = card.querySelector('.copi-search-input');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    const menu = document.getElementById(`copi-results-${rowId}`);
+    if (menu) menu.style.display = 'none';
+};
+
+window.filterCoPiDropdown = function(rowId, query) {
+    const card = document.getElementById(rowId);
+    if (!card) return;
+    const menu = document.getElementById(`copi-results-${rowId}`);
+    if (!menu) return;
+
+    // Close any other open dropdowns
+    document.querySelectorAll('.copi-dropdown-results').forEach(m => {
+        if (m.id !== `copi-results-${rowId}`) m.style.display = 'none';
+    });
+
+    const listGroup = menu.querySelector('.copi-list-group');
+    const countText = menu.querySelector('.search-count-text');
+    if (!listGroup) return;
+
+    const q = (query || '').toLowerCase().trim();
+    let filtered = PORTAL_SCIENTISTS;
+    if (q.length > 0 && !q.includes('➕ external institute scientist')) {
+        filtered = PORTAL_SCIENTISTS.filter(s => {
+            return (s.name && s.name.toLowerCase().includes(q)) ||
+                   (s.department && s.department.toLowerCase().includes(q)) ||
+                   (s.designation && s.designation.toLowerCase().includes(q)) ||
+                   (s.email && s.email.toLowerCase().includes(q));
+        });
+    }
+
+    if (countText) {
+        countText.innerHTML = `<i class="bi bi-people me-1"></i> ${filtered.length} of ${PORTAL_SCIENTISTS.length} Scientists Found`;
+    }
+
+    let itemsHtml = `
+        <a href="javascript:void(0)" class="list-group-item list-group-item-action list-group-item-warning py-2 px-3 fw-bold d-flex align-items-center justify-content-between" onclick="selectCoPiFromMenu('${rowId}', 'EXTERNAL')">
+            <div>
+                <i class="bi bi-globe me-2 text-warning"></i> ➕ Other / External Institute Scientist
+                <div class="extra-small text-muted fw-normal">For collaborators from IVRI, IARI, SAUs, or other universities</div>
+            </div>
+            <span class="badge bg-warning text-dark border">External</span>
+        </a>
+    `;
+
+    if (filtered.length === 0) {
+        itemsHtml += `
+            <div class="p-3 text-center text-muted small">
+                <i class="bi bi-search text-secondary d-block fs-5 mb-1"></i>
+                No NDRI scientists found matching "<strong>${escapeHtml(query)}</strong>".
+                <div class="extra-small text-muted mt-1">Try another keyword, or click above for external collaborator.</div>
+            </div>
+        `;
+    } else {
+        filtered.forEach(s => {
+            itemsHtml += `
+                <a href="javascript:void(0)" class="list-group-item list-group-item-action py-2 px-3 copi-menu-item" onclick="selectCoPiFromMenu('${rowId}', ${s.id})">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-bold text-dark mb-0">${escapeHtml(s.name)}</div>
+                            <div class="extra-small text-muted">
+                                <i class="bi bi-building me-1 text-primary"></i>${escapeHtml(s.department)} &bull; <span class="text-secondary">${escapeHtml(s.designation)}</span>
+                            </div>
+                        </div>
+                        <span class="badge bg-light text-secondary border font-monospace extra-small ms-2">${escapeHtml(s.email)}</span>
+                    </div>
+                </a>
+            `;
+        });
+    }
+
+    listGroup.innerHTML = itemsHtml;
+    menu.style.display = 'block';
+};
+
+window.selectCoPiFromMenu = function(rowId, val) {
+    const card = document.getElementById(rowId);
+    if (!card) return;
+    const select = card.querySelector('.copi-select');
+    if (select) {
+        select.value = val;
+        handleCoPiSelect(select, rowId);
+    }
+    const menu = document.getElementById(`copi-results-${rowId}`);
+    if (menu) menu.style.display = 'none';
+};
+
+// Global click listener to close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.copi-search-container')) {
+        document.querySelectorAll('.copi-dropdown-results').forEach(m => {
+            m.style.display = 'none';
+        });
+    }
+});
+
+window.handleCoPiSelect = function(select, rowId, customData = null) {
+    const card = document.getElementById(rowId);
+    if (!card) return;
+
+    const badge = card.querySelector('.copi-status-badge');
+    const nameInput = card.querySelector('.copi-name');
+    const instInput = card.querySelector('.copi-institution');
+    const desigInput = card.querySelector('.copi-designation');
+    const emailInput = card.querySelector('.copi-email');
+    const metaText = card.querySelector('.copi-meta-text');
+    const searchInput = card.querySelector('.copi-search-input');
+    const clearBtn = card.querySelector('.btn-clear-search');
+
+    const selectedOption = select.options[select.selectedIndex];
+    const val = select.value;
+
+    if (!val) {
+        if (badge) {
+            badge.className = 'copi-status-badge badge bg-secondary-subtle text-secondary border';
+            badge.textContent = 'Select Scientist';
+        }
+        if (searchInput) searchInput.value = '';
+        if (clearBtn) clearBtn.classList.add('d-none');
+        nameInput.value = '';
+        instInput.value = '';
+        desigInput.value = '';
+        emailInput.value = '';
+        nameInput.readOnly = false;
+        instInput.readOnly = false;
+        desigInput.readOnly = false;
+        emailInput.readOnly = false;
+        metaText.textContent = '';
+        return;
+    }
+
+    if (val === 'EXTERNAL') {
+        // External Scientist selected
+        if (badge) {
+            badge.className = 'copi-status-badge badge bg-warning-subtle text-dark border border-warning-subtle';
+            badge.innerHTML = '<i class="bi bi-globe me-1 text-warning"></i> External Institute Scientist';
+        }
+        if (searchInput) searchInput.value = '➕ External Institute Scientist';
+        if (clearBtn) clearBtn.classList.remove('d-none');
+
+        nameInput.readOnly = false;
+        instInput.readOnly = false;
+        desigInput.readOnly = false;
+        emailInput.readOnly = false;
+
+        if (customData) {
+            nameInput.value = customData.name || '';
+            instInput.value = customData.institution || '';
+            desigInput.value = customData.designation || '';
+            emailInput.value = customData.email || '';
+        } else {
+            nameInput.value = '';
+            instInput.value = '';
+            desigInput.value = '';
+            emailInput.value = '';
+            nameInput.focus();
+        }
+        metaText.innerHTML = '<span class="text-primary"><i class="bi bi-info-circle me-1"></i> Please enter the external collaborator\'s full name, parent institute, designation and contact email.</span>';
+    } else {
+        // NDRI Portal Scientist selected
+        const name = selectedOption.getAttribute('data-name') || '';
+        const inst = selectedOption.getAttribute('data-inst') || '';
+        const desig = selectedOption.getAttribute('data-desig') || '';
+        const email = selectedOption.getAttribute('data-email') || '';
+        const dept = selectedOption.getAttribute('data-dept') || '';
+
+        if (searchInput) searchInput.value = `${name} (${dept})`;
+        if (clearBtn) clearBtn.classList.remove('d-none');
+
+        nameInput.value = name;
+        instInput.value = inst;
+        desigInput.value = desig;
+        emailInput.value = email;
+
+        nameInput.readOnly = true;
+        instInput.readOnly = true;
+        desigInput.readOnly = true;
+        emailInput.readOnly = true;
+
+        if (badge) {
+            badge.className = 'copi-status-badge badge bg-success-subtle text-success border border-success-subtle';
+            badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> NDRI Portal Scientist';
+        }
+        metaText.innerHTML = `<span class="text-success"><i class="bi bi-building me-1"></i> <strong>Division:</strong> ${escapeHtml(dept)} &nbsp;|&nbsp; <strong>Designation:</strong> ${escapeHtml(desig)} &nbsp;|&nbsp; <strong>Email:</strong> ${escapeHtml(email)}</span>`;
+    }
+};
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// --- CKEditor 5 Initialization ---
+let achievementsEditor = null;
+let finalReportEditor = null;
+let previousIrcAtrEditor = null;
+let outputOutcomeEditor = null;
+
+if (typeof ClassicEditor !== 'undefined') {
+    const editorConfig = {
+        toolbar: [
+            'heading', '|',
+            'bold', 'italic', 'underline', 'strikethrough', '|',
+            'bulletedList', 'numberedList', '|',
+            'outdent', 'indent', '|',
+            'insertTable', 'blockQuote', '|',
+            'undo', 'redo'
+        ]
+    };
+
+    const achEl = document.querySelector('#significant_achievements');
+    if (achEl) {
+        ClassicEditor.create(achEl, editorConfig)
+            .then(editor => {
+                achievementsEditor = editor;
+                editor.model.document.on('change:data', () => {
+                    achEl.value = editor.getData();
+                });
+            })
+            .catch(err => console.warn('CKEditor Significant Achievements Init:', err));
+    }
+
+    const frEl = document.querySelector('#final_report');
+    if (frEl) {
+        ClassicEditor.create(frEl, editorConfig)
+            .then(editor => {
+                finalReportEditor = editor;
+                editor.model.document.on('change:data', () => {
+                    frEl.value = editor.getData();
+                    updateWordCount();
+                });
+                setTimeout(updateWordCount, 300);
+            })
+            .catch(err => console.warn('CKEditor Final Report Init:', err));
+    }
+
+    const atrEl = document.querySelector('#previous_irc_atr');
+    if (atrEl) {
+        ClassicEditor.create(atrEl, editorConfig)
+            .then(editor => {
+                previousIrcAtrEditor = editor;
+                editor.model.document.on('change:data', () => {
+                    atrEl.value = editor.getData();
+                });
+            })
+            .catch(err => console.warn('CKEditor Previous IRC ATR Init:', err));
+    }
+
+    const outEl = document.querySelector('#output_outcome');
+    if (outEl) {
+        ClassicEditor.create(outEl, editorConfig)
+            .then(editor => {
+                outputOutcomeEditor = editor;
+                editor.model.document.on('change:data', () => {
+                    outEl.value = editor.getData();
+                });
+            })
+            .catch(err => console.warn('CKEditor Output / Outcome Init:', err));
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const selectElem = document.getElementById('selected_db_project_id');
-    if (selectElem && selectElem.value && selectElem.value !== 'manual') {
-        handleDbProjectSelection(selectElem.value);
+    // Check if we have prefilled Co-PIs from draft edit
+    if (typeof EXISTING_COPIS !== 'undefined' && EXISTING_COPIS && EXISTING_COPIS.length > 0) {
+        const container = document.getElementById('copi-container');
+        if (container) container.innerHTML = '';
+        copiIndex = 0;
+        EXISTING_COPIS.forEach(cp => {
+            addCoPiRow({
+                name: cp.co_pi_name || cp.name || '',
+                institution: cp.institution || '',
+                designation: cp.designation || '',
+                email: cp.email || ''
+            });
+        });
     } else {
-        toggleFundingAgencyInput();
-        calculateProjectDuration();
-        calculateBudgetUtilization();
+        const selectElem = document.getElementById('selected_db_project_id');
+        if (selectElem && selectElem.value && selectElem.value !== 'manual') {
+            handleDbProjectSelection(selectElem.value);
+        } else {
+            toggleFundingAgencyInput();
+            calculateProjectDuration();
+            calculateBudgetUtilization();
+        }
     }
     updateWordCount();
 
-    const form = document.querySelector('form[method="POST"]');
+    const form = document.getElementById('completed-proposal-form') || document.querySelector('form[method="POST"]');
     if (form) {
         form.addEventListener('submit', function(e) {
+            // Synchronize CKEditor 5 instances
+            if (achievementsEditor) {
+                document.querySelector('#significant_achievements').value = achievementsEditor.getData();
+            }
+            if (finalReportEditor) {
+                document.querySelector('#final_report').value = finalReportEditor.getData();
+            }
+            if (previousIrcAtrEditor) {
+                document.querySelector('#previous_irc_atr').value = previousIrcAtrEditor.getData();
+            }
+            if (outputOutcomeEditor) {
+                document.querySelector('#output_outcome').value = outputOutcomeEditor.getData();
+            }
+
             const submitBtn = e.submitter || document.activeElement;
             const isDraft = window.isDraftAction || (submitBtn && (submitBtn.value === 'draft' || submitBtn.getAttribute('value') === 'draft'));
             if (isDraft) {
@@ -1681,6 +2174,49 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (draftActionInput) draftActionInput.value = 'draft';
                 form.querySelectorAll('[required]').forEach(el => el.removeAttribute('required'));
                 return true;
+            }
+
+            // Word count limit for Final Report on submit
+            const finalWords = updateWordCount();
+            if (finalWords > 250) {
+                e.preventDefault();
+                alert(`Final Report must be strictly 250 words or less.\nMaximum allowed: 250 words.\nCurrent word count: ${finalWords} words.\n\nPlease shorten the summary before submitting.`);
+                const frCard = document.querySelector('#final_report');
+                if (frCard) frCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            // Validate mandatory rich text fields
+            const achRaw = (document.querySelector('#significant_achievements').value || '').replace(/<[^>]*>/g, '').trim();
+            if (!achRaw) {
+                e.preventDefault();
+                alert('Significant Achievements is mandatory.');
+                document.querySelector('#significant_achievements').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            const frRaw = (document.querySelector('#final_report').value || '').replace(/<[^>]*>/g, '').trim();
+            if (!frRaw) {
+                e.preventDefault();
+                alert('Final Report is mandatory.');
+                document.querySelector('#final_report').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            const atrRaw = (document.querySelector('#previous_irc_atr').value || '').replace(/<[^>]*>/g, '').trim();
+            if (!atrRaw) {
+                e.preventDefault();
+                alert('Action Taken Report (ATR) on Recommendations of Previous IRC is mandatory (enter N/A if not applicable).');
+                document.querySelector('#previous_irc_atr').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            const outRaw = (document.querySelector('#output_outcome').value || '').replace(/<[^>]*>/g, '').trim();
+            if (!outRaw) {
+                e.preventDefault();
+                alert('Output / Outcome is mandatory.');
+                document.querySelector('#output_outcome').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
             }
         });
     }
