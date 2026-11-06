@@ -893,8 +893,15 @@ function render_yearly_budget_html($yearlyBudget, float $totalBudget = 0, bool $
 }
 
 /**
- * Get funding agency details including agency name, agency type (National/International),
- * and styled badges.
+ * Get the list of standard external funding agencies
+ */
+function get_external_funding_agencies(): array {
+    global $EXTERNAL_FUNDING_AGENCIES;
+    return $EXTERNAL_FUNDING_AGENCIES ?? [];
+}
+
+/**
+ * Get funding agency details including agency name and styled badges.
  */
 function get_funding_agency_details($item): array {
     $projectType = $item['project_type'] ?? ($item['prop_project_type'] ?? 'in_house');
@@ -907,11 +914,9 @@ function get_funding_agency_details($item): array {
 
     $badgeHtml = '';
     if ($isExternal) {
-        $typeBadge = ($agencyType === 'International')
-            ? '<span class="badge bg-info text-white shadow-xs me-1"><i class="bi bi-globe me-1"></i>International Funding Agency</span>'
-            : '<span class="badge bg-primary text-white shadow-xs me-1"><i class="bi bi-flag-fill me-1"></i>National Funding Agency</span>';
+        $typeBadge = '<span class="badge bg-success text-white shadow-xs me-1"><i class="bi bi-bank2 me-1"></i>Externally Funded</span>';
         $agencyBadge = !empty($agencyName) ? '<span class="badge bg-light text-dark border"><i class="bi bi-bank2 text-success me-1"></i>' . htmlspecialchars($agencyName) . '</span>' : '';
-        $badgeHtml = $typeBadge . ' ' . $agencyBadge;
+        $badgeHtml = $typeBadge . ($agencyBadge ? ' ' . $agencyBadge : '');
     } else {
         $badgeHtml = '<span class="badge bg-secondary-subtle text-secondary border"><i class="bi bi-house-door-fill me-1"></i>In-house (Core Mandate)</span>';
     }
@@ -924,6 +929,7 @@ function get_funding_agency_details($item): array {
         'badge_html' => trim($badgeHtml)
     ];
 }
+
 
 /**
  * Fetch all review and scientist comments for a proposal

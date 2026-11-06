@@ -225,11 +225,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $origObjectives = $dbProj['objectives'] ?: '';
     } else {
         $projectType = sanitize($_POST['project_type'] ?? '');
-        $fundingAgency = trim(sanitize($_POST['funding_agency'] ?? ''));
-        $fundingAgencyType = sanitize($_POST['funding_agency_type'] ?? 'National');
-        if (!in_array($fundingAgencyType, ['National', 'International'])) {
-            $fundingAgencyType = 'National';
+        $fundingAgencySelect = trim(sanitize($_POST['funding_agency_select'] ?? ''));
+        $fundingAgencyOther = trim(sanitize($_POST['funding_agency_other'] ?? ''));
+        if ($fundingAgencySelect === 'OTHER') {
+            $fundingAgency = $fundingAgencyOther;
+        } else {
+            $fundingAgency = $fundingAgencySelect ?: trim(sanitize($_POST['funding_agency'] ?? ''));
         }
+        $fundingAgencyType = 'National';
         $yearlyBudget = null;
         $projectCode = trim(sanitize($_POST['project_number'] ?? ''));
         $title = sanitize($_POST['title'] ?? '');
@@ -653,7 +656,7 @@ include __DIR__ . '/../includes/header.php';
                                             ?>
                                                 <div><?= $selAgency['badge_html'] ?></div>
                                                 <?php if ($selAgency['is_external'] && !empty($selAgency['agency_name'])): ?>
-                                                    <div class="text-muted extra-small mt-1">Agency: <strong><?= e($selAgency['agency_name']) ?></strong> (<?= e($selAgency['agency_type']) ?>)</div>
+                                                    <div class="text-muted extra-small mt-1">Funding Agency: <strong><?= e($selAgency['agency_name']) ?></strong></div>
                                                 <?php endif; ?>
                                             <?php else: ?>
                                                 -
@@ -772,43 +775,64 @@ include __DIR__ . '/../includes/header.php';
                             </div>
                         </div>
 
+                        <?php
+                        $selectedAgencyVal = '';
+                        $isOtherAgency = false;
+                        $otherAgencyVal = '';
+                        $externalAgenciesList = get_external_funding_agencies();
+
+                        if (!empty($fundingAgency)) {
+                            if (in_array($fundingAgency, $externalAgenciesList, true)) {
+                                $selectedAgencyVal = $fundingAgency;
+                            } else {
+                                $selectedAgencyVal = 'OTHER';
+                                $isOtherAgency = true;
+                                $otherAgencyVal = $fundingAgency;
+                            }
+                        }
+                        if (isset($_POST['funding_agency_select']) && $_POST['funding_agency_select'] === 'OTHER') {
+                            $selectedAgencyVal = 'OTHER';
+                            $isOtherAgency = true;
+                            $otherAgencyVal = trim(sanitize($_POST['funding_agency_other'] ?? ''));
+                        }
+                        ?>
                         <div class="col-12" id="funding-agency-wrapper" style="<?= ($projectType === 'funding_agency') ? '' : 'display: none;' ?>">
                             <div class="p-3 bg-light rounded border border-success-subtle shadow-xs">
-                                <div class="row g-3 align-items-center">
-                                    <div class="col-md-5">
-                                        <label class="form-label small fw-bold text-dark mb-1">
-                                            <i class="bi bi-globe2 text-success me-1"></i> Agency Classification <span class="text-danger">*</span>
-                                        </label>
-                                        <div class="d-flex gap-2">
-                                            <label class="d-flex align-items-center flex-fill p-2 rounded border bg-white shadow-xs" style="cursor: pointer;" id="opt-agency-national">
-                                                <input type="radio" name="funding_agency_type" id="agency_type_national" value="National" class="form-check-input me-2 mt-0" <?= ($fundingAgencyType !== 'International') ? 'checked' : '' ?>>
-                                                <div>
-                                                    <span class="fw-bold text-primary small d-block"><i class="bi bi-flag-fill me-1"></i> National</span>
-                                                    <span class="text-muted extra-small">ICAR, DBT, DST, SERB, CSIR, MoFPI, etc.</span>
-                                                </div>
-                                            </label>
-                                            <label class="d-flex align-items-center flex-fill p-2 rounded border bg-white shadow-xs" style="cursor: pointer;" id="opt-agency-international">
-                                                <input type="radio" name="funding_agency_type" id="agency_type_international" value="International" class="form-check-input me-2 mt-0" <?= ($fundingAgencyType === 'International') ? 'checked' : '' ?>>
-                                                <div>
-                                                    <span class="fw-bold text-info small d-block"><i class="bi bi-globe me-1"></i> International</span>
-                                                    <span class="text-muted extra-small">FAO, World Bank, Gates Fdn, IAEA, etc.</span>
-                                                </div>
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-7">
-                                        <label for="funding_agency" class="form-label small fw-bold text-dark mb-1">
-                                            <i class="bi bi-bank2 text-success me-1"></i> Funding Agency Name <span class="text-danger">*</span>
+                                <div class="row g-3">
+                                    <div class="<?= $isOtherAgency ? 'col-md-6' : 'col-12' ?>" id="funding_agency_select_col">
+                                        <label for="funding_agency_select" class="form-label small fw-bold text-dark mb-1">
+                                            <i class="bi bi-bank2 text-success me-1"></i> External Funding Agency <span class="text-danger">*</span>
                                         </label>
                                         <div class="input-group">
                                             <span class="input-group-text bg-white"><i class="bi bi-bank text-success"></i></span>
-                                            <input type="text" 
-                                                   name="funding_agency" 
-                                                   id="funding_agency" 
-                                                   class="form-control fw-semibold" 
-                                                   placeholder="e.g. Department of Biotechnology (DBT), DST, BIRAC, etc." 
-                                                   value="<?= e($fundingAgency) ?>">
+                                            <select name="funding_agency_select" id="funding_agency_select" class="form-select fw-semibold" onchange="handleFundingAgencyChange()">
+                                                <option value="">-- Select External Funding Agency --</option>
+                                                <?php foreach ($externalAgenciesList as $agencyItem): ?>
+                                                    <option value="<?= e($agencyItem) ?>" <?= ($selectedAgencyVal === $agencyItem) ? 'selected' : '' ?>>
+                                                        <?= e($agencyItem) ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                                <option value="OTHER" <?= ($selectedAgencyVal === 'OTHER') ? 'selected' : '' ?>>
+                                                    ➕ Other / External Funding Agency (Specify)
+                                                </option>
+                                            </select>
                                         </div>
+                                        <div class="form-text text-muted extra-small">Select the granting / sponsoring department or council.</div>
+                                    </div>
+                                    <div class="col-md-6" id="funding_agency_other_wrapper" style="<?= $isOtherAgency ? '' : 'display: none;' ?>">
+                                        <label for="funding_agency_other" class="form-label small fw-bold text-dark mb-1">
+                                            <i class="bi bi-pencil-square text-success me-1"></i> Specify Other Funding Agency <span class="text-danger">*</span>
+                                        </label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white"><i class="bi bi-pencil-fill text-muted"></i></span>
+                                            <input type="text" 
+                                                   name="funding_agency_other" 
+                                                   id="funding_agency_other" 
+                                                   class="form-control fw-semibold" 
+                                                   placeholder="Enter funding agency name..." 
+                                                   value="<?= e($otherAgencyVal) ?>">
+                                        </div>
+                                        <div class="form-text text-muted extra-small">Please specify the official granting body name.</div>
                                     </div>
                                 </div>
                             </div>
@@ -1329,14 +1353,9 @@ function handleDbProjectSelection(selectedVal) {
     const cardCategory = document.getElementById('db_card_category');
     if (cardCategory) {
         if (proj.project_type === 'funding_agency') {
-            const isIntl = (proj.funding_agency_type === 'International');
-            const typeBadge = isIntl 
-                ? '<span class="badge bg-info text-white shadow-xs me-1"><i class="bi bi-globe me-1"></i>International Funding Agency</span>'
-                : '<span class="badge bg-primary text-white shadow-xs me-1"><i class="bi bi-flag-fill me-1"></i>National Funding Agency</span>';
-            const nameBadge = proj.funding_agency 
-                ? `<span class="badge bg-light text-dark border"><i class="bi bi-bank2 text-success me-1"></i>${escapeHtml(proj.funding_agency)}</span>` 
-                : '';
-            cardCategory.innerHTML = `<div>${typeBadge} ${nameBadge}</div><div class="text-muted extra-small mt-1">Agency: <strong>${escapeHtml(proj.funding_agency || 'External')}</strong> (${escapeHtml(proj.funding_agency_type || 'National')})</div>`;
+            const agencyName = proj.funding_agency || 'External';
+            const nameBadge = `<span class="badge bg-light text-dark border"><i class="bi bi-bank2 text-success me-1"></i>${escapeHtml(agencyName)}</span>`;
+            cardCategory.innerHTML = `<div><span class="badge bg-success text-white shadow-xs me-1"><i class="bi bi-bank2 me-1"></i>Externally Funded</span> ${nameBadge}</div><div class="text-muted extra-small mt-1">Funding Agency: <strong>${escapeHtml(agencyName)}</strong></div>`;
         } else {
             cardCategory.innerHTML = `<span class="badge bg-secondary-subtle text-secondary border"><i class="bi bi-house-door-fill me-1"></i>In-house (Core Mandate)</span>`;
         }
@@ -1497,6 +1516,35 @@ function toggleExtensionFields() {
     if (extJust) extJust.required = isChecked;
 }
 
+function handleFundingAgencyChange() {
+    const sel = document.getElementById('funding_agency_select');
+    const otherCol = document.getElementById('funding_agency_other_wrapper');
+    const otherInput = document.getElementById('funding_agency_other');
+    const selectCol = document.getElementById('funding_agency_select_col');
+
+    if (!sel) return;
+
+    if (sel.value === 'OTHER') {
+        if (otherCol) otherCol.style.display = 'block';
+        if (selectCol) {
+            selectCol.classList.remove('col-12');
+            selectCol.classList.add('col-md-6');
+        }
+        if (otherInput) {
+            otherInput.required = true;
+        }
+    } else {
+        if (otherCol) otherCol.style.display = 'none';
+        if (selectCol) {
+            selectCol.classList.remove('col-md-6');
+            selectCol.classList.add('col-12');
+        }
+        if (otherInput) {
+            otherInput.required = false;
+        }
+    }
+}
+
 // Toggle funding agency input and project code input for manual mode
 function toggleFundingAgencyInput() {
     const isFunding = document.getElementById('type_funding_agency').checked;
@@ -1505,9 +1553,15 @@ function toggleFundingAgencyInput() {
     
     // Funding agency input wrapper
     const fundingWrapper = document.getElementById('funding-agency-wrapper');
-    const fundingInput = document.getElementById('funding_agency');
+    const agencySelect = document.getElementById('funding_agency_select');
+    const agencyOther = document.getElementById('funding_agency_other');
     if (fundingWrapper) fundingWrapper.style.display = isFunding ? 'block' : 'none';
-    if (fundingInput) fundingInput.required = !isDbProject && isFunding;
+    if (agencySelect) agencySelect.required = !isDbProject && isFunding;
+    if (isFunding) {
+        handleFundingAgencyChange();
+    } else {
+        if (agencyOther) agencyOther.required = false;
+    }
 
     // Project code input wrapper (ONLY for In-house projects; hidden for Funding Agency)
     const codeWrapper = document.getElementById('project-code-wrapper');

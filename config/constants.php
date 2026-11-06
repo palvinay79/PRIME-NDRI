@@ -141,3 +141,28 @@ $NATIONAL_PRIORITY_AREAS = [
     'Import Substitution & Export Quality Dairy Products',
     'Farmer Livelihood & Women Empowerment in Dairy'
 ];
+
+// External Funding Agencies List (Standard 20 Agencies + Other)
+$EXTERNAL_FUNDING_AGENCIES = [
+    'Department of Science and Technology (DST)',
+    'Department of Biotechnology (DBT)',
+    'Anusandhan National Research Foundation (ANRF, formerly SERB)',
+    'Indian Council of Agricultural Research (ICAR)',
+    'Indian Council of Medical Research (ICMR)',
+    'Council of Scientific and Industrial Research (CSIR)',
+    'Indian Council of Social Science Research (ICSSR)',
+    'Department of Animal Husbandry and Dairying (DAHD)',
+    'Ministry of Food Processing Industries (MoFPI)',
+    'Ministry of Environment, Forest and Climate Change (MoEFCC)',
+    'Ministry of Electronics and Information Technology (MeitY)',
+    'Biotechnology Industry Research Assistance Council (BIRAC)',
+    'National Agricultural Science Fund (NASF)',
+    'National Agricultural Innovation Fund (NAIF)',
+    'National Livestock Mission (NLM)',
+    'National Dairy Development Board (NDDB)',
+    'National Bank for Agriculture and Rural Development (NABARD)',
+    'Rashtriya Krishi Vikas Yojana (RKVY)',
+    'Food Safety and Standards Authority of India (FSSAI)',
+    'Haryana State Council for Science and Technology (HSCST)',
+];
+
