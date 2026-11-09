@@ -931,6 +931,20 @@ function get_national_priority_areas(): array {
 }
 
 /**
+ * Format file size in bytes to human readable format (KB, MB, GB)
+ */
+function format_file_size(int $bytes): string {
+    if ($bytes <= 0) {
+        return '0 KB';
+    }
+    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    $i = (int)floor(log($bytes, 1024));
+    if ($i < 0) $i = 0;
+    if ($i >= count($units)) $i = count($units) - 1;
+    return round($bytes / pow(1024, $i), 1) . ' ' . $units[$i];
+}
+
+/**
  * Get funding agency details including agency name and styled badges.
  */
 function get_funding_agency_details($item): array {

@@ -93,6 +93,7 @@ if (isset($_GET['format']) && $_GET['format'] === 'html') {
 /**
  * Pure PHP Docx Builder (Generates valid Office Open XML zip container)
  */
+if (!class_exists('DocxBuilder')) {
 class DocxBuilder {
     private string $body = '';
 
@@ -314,11 +315,31 @@ class DocxBuilder {
             'word/document.xml' => $xmlDoc
         ];
 
-        // Pure PHP ZIP generation (Standard PKZIP format)
+        // 1. Try PHP ZipArchive extension first if available
+        if (class_exists('ZipArchive')) {
+            $tempFile = tempnam(sys_get_temp_dir(), 'ndri_doc_');
+            if ($tempFile !== false) {
+                $zip = new \ZipArchive();
+                if ($zip->open($tempFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
+                    foreach ($files as $name => $content) {
+                        $zip->addFromString($name, $content);
+                    }
+                    $zip->close();
+                    $binary = @file_get_contents($tempFile);
+                    @unlink($tempFile);
+                    if ($binary !== false && strlen($binary) > 0) {
+                        return $binary;
+                    }
+                }
+                @unlink($tempFile);
+            }
+        }
+
+        // 2. Pure PHP ZIP generation fallback (Standard PKZIP format)
         $data = '';
         $cd = '';
         $dtime = (12 << 11) | (0 << 5) | (0 >> 1);
-        $ddate = ((2026 - 1980) << 9) | (9 << 5) | 3;
+        $ddate = ((date('Y') - 1980) << 9) | (date('n') << 5) | date('j');
 
         foreach ($files as $name => $content) {
             $len = strlen($content);
@@ -340,6 +361,7 @@ class DocxBuilder {
         return $data . $cd . $eocd;
     }
 }
+} // end if (!class_exists('DocxBuilder'))
 
 // Build Document Content
 $builder = new DocxBuilder();
@@ -572,6 +594,11 @@ if (!empty($documents)) {
 $binaryDocx = $builder->generateDocx();
 $cleanPropNum = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string)$proposal['proposal_number']);
 $filename = "Proposal_{$cleanPropNum}.docx";
+
+// Discard all previous output buffers so binary file is pure and headers are sent cleanly
+while (ob_get_level() > 0) {
+    ob_end_clean();
+}
 
 // Send proper OpenXML headers
 header("Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document");

@@ -222,7 +222,7 @@ function build_filter_url(array $overrides = []): string {
 
 // Build export URL preserving active tab and filters
 $exportParams = [
-    'type' => ($categoryFilter === 'all' ? 'new' : $categoryFilter),
+    'type' => $categoryFilter,
     'format' => 'docx'
 ];
 if (!empty($programFilter)) $exportParams['program'] = $programFilter;
@@ -404,26 +404,6 @@ include __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </form>
 
-    <!-- JDR Export Dossier Announcement Banner -->
-    <div class="p-3 bg-light border-bottom d-flex flex-wrap align-items-center justify-content-between gap-3">
-        <div class="d-flex align-items-center gap-3">
-            <div class="p-2 rounded bg-primary text-white d-flex align-items-center justify-content-center shadow-xs" style="width: 38px; height: 38px;">
-                <i class="bi bi-file-earmark-word fs-5"></i>
-            </div>
-            <div>
-                <strong class="text-dark d-block">Official JDR Deliberation Dossier Export (.docx)</strong>
-                <span class="text-muted small">
-                    Export proposals slated for council deliberation formatted as a unified JDR dossier: organized by <strong>Program A</strong> (In-House &rarr; Externally Funded), then <strong>Program B</strong>, through <strong>Program F</strong>.
-                </span>
-            </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <a href="<?= $exportUrl ?>" class="btn btn-primary btn-sm fw-bold shadow-sm" title="Export compiled JDR Word Document (.docx)">
-                <i class="bi bi-file-earmark-word-fill me-1"></i> Export (.docx)
-            </a>
-        </div>
-    </div>
-
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" id="slatedProposalsTable">
             <thead class="table-light">
@@ -453,8 +433,6 @@ include __DIR__ . '/../includes/header.php';
                     </tr>
                 <?php else: ?>
                     <?php 
-                        $currentProg = null;
-                        $currentType = null;
                         foreach ($filteredSlated as $p): 
                             $cat = $p['proposal_category'] ?? 'new';
                             $isComp = ($cat === 'completed');
@@ -462,51 +440,6 @@ include __DIR__ . '/../includes/header.php';
                             $pProg = resolve_program_letter($p['institute_priority_area'] ?? '');
                             $pType = (($p['project_type'] ?? '') === 'funding_agency') ? 'funding_agency' : 'in_house';
                             $isExt = ($pType === 'funding_agency');
-
-                            // Program group headers when sorting by program
-                            if ($sortOption === 'program_in_house' || $sortOption === 'program_asc') {
-                                if ($currentProg !== $pProg) {
-                                    $currentProg = $pProg;
-                                    $currentType = null;
-                                    ?>
-                                    <tr class="table-primary border-top border-primary-subtle">
-                                        <td colspan="7" class="py-2 px-3">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="fw-bold text-dark fs-6">
-                                                    <i class="bi bi-bookmark-star-fill text-primary me-2"></i>
-                                                    Program <?= e($currentProg) ?> &mdash; <?= e($priorityPrograms[$currentProg] ?? "Program {$currentProg}") ?>
-                                                </span>
-                                                <span class="badge bg-primary text-white font-monospace"><?= $programCounts[$currentProg] ?? 0 ?> proposal(s)</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <?php
-                                }
-                                if ($sortOption === 'program_in_house' && $currentType !== $pType) {
-                                    $currentType = $pType;
-                                    ?>
-                                    <tr class="bg-body-secondary border-bottom">
-                                        <td colspan="7" class="py-1 px-3 extra-small fw-bold text-uppercase <?= $isExt ? 'text-success' : 'text-primary' ?>">
-                                            <?= $isExt 
-                                                ? '<i class="bi bi-bank2 me-1"></i> Externally Funded Proposals &mdash; Program ' . e($currentProg) 
-                                                : '<i class="bi bi-house-door-fill me-1"></i> In-House Proposals &mdash; Program ' . e($currentProg) ?>
-                                        </td>
-                                    </tr>
-                                    <?php
-                                }
-                            } elseif ($sortOption === 'division_asc' || $sortOption === 'division_desc') {
-                                if ($currentProg !== $p['department_id']) {
-                                    $currentProg = $p['department_id'];
-                                    ?>
-                                    <tr class="table-secondary border-top border-secondary-subtle">
-                                        <td colspan="7" class="py-2 px-3 fw-bold text-dark">
-                                            <i class="bi bi-building me-2 text-secondary"></i>
-                                            <?= e($p['department_name']) ?> (<?= e($p['department_code']) ?>)
-                                        </td>
-                                    </tr>
-                                    <?php
-                                }
-                            }
                     ?>
                         <tr class="proposal-row">
                             <td>

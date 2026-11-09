@@ -19,12 +19,18 @@
  * - Uses clean UTF-8 dashes and characters (no unparsed &mdash; or &bull; entities in Word XML).
  */
 
+if (ob_get_level() == 0) {
+    ob_start();
+}
+
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/permissions.php';
 
 require_login();
+
+try {
 
 $db = get_db();
 $userId = current_user_id();
@@ -41,8 +47,8 @@ $divisionFilter = (int)($_GET['division'] ?? 0);
 $sql = "SELECT p.*, u.name as scientist_name, u.email as scientist_email, u.designation as scientist_designation,
                d.department_name, d.department_code
         FROM proposals p
-        JOIN users u ON p.scientist_id = u.id
-        JOIN departments d ON p.department_id = d.id
+        LEFT JOIN users u ON p.scientist_id = u.id
+        LEFT JOIN departments d ON p.department_id = d.id
         WHERE p.current_status = ?";
 $params = [STATUS_APPROVED_IRC];
 
@@ -399,6 +405,7 @@ if ($format === 'html') {
 // -------------------------------------------------------------------------
 // PURE PHP WORD DOCUMENT GENERATOR (.DOCX) - IDENTICAL TO export-doc.php
 // -------------------------------------------------------------------------
+if (!class_exists('DocxBuilder')) {
 class DocxBuilder {
     private string $body = '';
 
@@ -620,7 +627,27 @@ class DocxBuilder {
             'word/document.xml' => $xmlDoc
         ];
 
-        // Pure PHP ZIP generation (Standard PKZIP format)
+        // 1. Try PHP ZipArchive extension first if available
+        if (class_exists('ZipArchive')) {
+            $tempFile = tempnam(sys_get_temp_dir(), 'ndri_docx_');
+            if ($tempFile !== false) {
+                $zip = new \ZipArchive();
+                if ($zip->open($tempFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
+                    foreach ($files as $name => $content) {
+                        $zip->addFromString($name, $content);
+                    }
+                    $zip->close();
+                    $binary = @file_get_contents($tempFile);
+                    @unlink($tempFile);
+                    if ($binary !== false && strlen($binary) > 0) {
+                        return $binary;
+                    }
+                }
+                @unlink($tempFile);
+            }
+        }
+
+        // 2. Pure PHP ZIP generation fallback (Standard PKZIP format)
         $data = '';
         $cd = '';
         $dtime = (12 << 11) | (0 << 5) | (0 >> 1);
@@ -646,11 +673,26 @@ class DocxBuilder {
         return $data . $cd . $eocd;
     }
 }
+} // end if (!class_exists('DocxBuilder'))
+
+if (!function_exists('format_file_size')) {
+    function format_file_size(int $bytes): string {
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 2) . ' MB';
+        } elseif ($bytes >= 1024) {
+            return number_format($bytes / 1024, 2) . ' KB';
+        } elseif ($bytes > 0) {
+            return $bytes . ' bytes';
+        }
+        return '0 bytes';
+    }
+}
 
 /**
  * Renders a complete proposal dossier using the exact same structure and sections as export-doc.php
  * Note: Workflow history table is intentionally excluded per user requirement.
  */
+if (!function_exists('render_proposal_dossier_docx')) {
 function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, string $programHeaderInfo = '', string $programLetter = ''): void {
     $cat = $proposal['proposal_category'] ?? 'new';
     $progKey = !empty($programLetter) ? $programLetter : resolve_program_letter($proposal['institute_priority_area'] ?? '');
@@ -841,6 +883,7 @@ function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, str
         $builder->addTable(["Document Name", "File Size", "Uploaded Date & Time"], $docRows);
     }
 }
+} // end if (!function_exists('render_proposal_dossier_docx'))
 
 // -------------------------------------------------------------------------
 // ASSEMBLE COMPILATION DOSSIER
@@ -1006,7 +1049,13 @@ foreach ($programKeys as $pKey) {
 
 // Generate docx binary
 $binaryDocx = $builder->generateDocx();
-$filename = "JDR_IRC_Meeting_New_Proposals_Deliberation_" . date('Y_m_d') . ".docx";
+$cleanCategory = strtoupper(trim((string)$typeFilter));
+$filename = "JDR_IRC_Meeting_{$cleanCategory}_Proposals_Deliberation_" . date('Y_m_d') . ".docx";
+
+// Discard all previous output buffers so binary file is pure and headers are sent cleanly
+while (ob_get_level() > 0) {
+    ob_end_clean();
+}
 
 // Send proper OpenXML headers
 header("Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document");
@@ -1017,3 +1066,38 @@ header("Pragma: public");
 
 echo $binaryDocx;
 exit;
+
+} catch (\Throwable $e) {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    http_response_code(500);
+    ?>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Error Exporting IRC Deliberation Dossier</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px; background: #f8fafc; color: #1e293b; }
+            .card { background: #fff; max-width: 650px; margin: 40px auto; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-left: 5px solid #dc2626; }
+            h2 { color: #dc2626; margin-top: 0; font-size: 20px; }
+            p { font-size: 14px; line-height: 1.6; color: #475569; }
+            .btn { display: inline-block; padding: 8px 16px; background: #0284c7; color: #fff; text-decoration: none; border-radius: 4px; font-weight: 500; font-size: 13px; margin-top: 15px; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Unable to Generate IRC Dossier</h2>
+            <p>An unexpected issue occurred while compiling the IRC Meeting Deliberation Dossier:</p>
+            <p style="background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 4px; font-family: monospace;">
+                <?= htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') ?>
+            </p>
+            <p>Please return to the IRC Meetings dashboard or contact the administrator.</p>
+            <a href="joint-director/irc-meetings.php" class="btn">&larr; Return to IRC Meetings</a>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
