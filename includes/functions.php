@@ -559,6 +559,28 @@ function get_priority_area_title(?string $code): string {
 }
 
 /**
+ * Resolves priority area string or text description to clean Program letter (A to F)
+ */
+function resolve_program_letter(?string $area): string {
+    if (empty($area)) return 'A';
+    $clean = strtoupper(trim($area));
+    if (in_array($clean, ['A', 'B', 'C', 'D', 'E', 'F'])) {
+        return $clean;
+    }
+    if (preg_match('/(?:PROGRAM\s*|^)([A-F])\b/i', $clean, $m)) {
+        return strtoupper($m[1]);
+    }
+    if (stripos($clean, 'basic') !== false || stripos($clean, 'viksit') !== false || stripos($clean, 'policy') !== false || stripos($clean, 'translational') !== false) return 'A';
+    if (stripos($clean, 'germplasm') !== false || stripos($clean, 'computational') !== false || stripos($clean, 'biotechnological') !== false || stripos($clean, 'breeding') !== false || stripos($clean, 'embryo') !== false) return 'B';
+    if (stripos($clean, 'climate') !== false || stripos($clean, 'silage') !== false || stripos($clean, 'processing') !== false || stripos($clean, 'resilient') !== false) return 'C';
+    if (stripos($clean, 'functional') !== false || stripos($clean, 'circular') !== false || stripos($clean, 'packaging') !== false || stripos($clean, 'bioactive') !== false || stripos($clean, 'whey') !== false) return 'D';
+    if (stripos($clean, 'one health') !== false || stripos($clean, 'amr') !== false || stripos($clean, 'safety') !== false || stripos($clean, 'biosensor') !== false || stripos($clean, 'mastitis') !== false || stripos($clean, 'quality milk') !== false) return 'E';
+    if (stripos($clean, 'demand') !== false || stripos($clean, 'extension') !== false || stripos($clean, 'shg') !== false || stripos($clean, 'dissemination') !== false || stripos($clean, 'capacity') !== false || stripos($clean, 'stakeholder') !== false) return 'F';
+    return 'A';
+}
+
+
+/**
  * Get all Co-Principal Investigators for a proposal.
  * Automatically resolves Co-PIs directly from proposal_co_pis, or falls back to
  * the linked parent project's proposal if this is an ongoing/completed submission.

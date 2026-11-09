@@ -31,8 +31,11 @@ $userId = current_user_id();
 $userRole = current_user_role_id();
 
 // Filter parameters: defaults to 'new' proposals as specified by user
-$typeFilter = sanitize($_GET['type'] ?? 'new'); // 'new', 'all', 'ongoing', 'completed'
+$typeFilter = sanitize($_GET['category'] ?? ($_GET['type'] ?? 'new')); // 'new', 'all', 'ongoing', 'completed'
 $format = sanitize($_GET['format'] ?? 'docx'); // 'docx' or 'html'
+$programFilter = strtoupper(trim(sanitize($_GET['program'] ?? '')));
+$fundingTypeFilter = sanitize($_GET['funding_type'] ?? '');
+$divisionFilter = (int)($_GET['division'] ?? 0);
 
 // Query proposals slated for IRC Meeting Deliberation
 $sql = "SELECT p.*, u.name as scientist_name, u.email as scientist_email, u.designation as scientist_designation,
@@ -49,6 +52,23 @@ if ($typeFilter === 'new') {
     $sql .= " AND p.proposal_category = 'ongoing'";
 } elseif ($typeFilter === 'completed') {
     $sql .= " AND p.proposal_category = 'completed'";
+}
+
+if (!empty($programFilter) && in_array($programFilter, ['A', 'B', 'C', 'D', 'E', 'F'])) {
+    $sql .= " AND (UPPER(TRIM(p.institute_priority_area)) = ? OR UPPER(TRIM(p.institute_priority_area)) LIKE ?)";
+    $params[] = $programFilter;
+    $params[] = "PROGRAM " . $programFilter . "%";
+}
+
+if ($fundingTypeFilter === 'in_house') {
+    $sql .= " AND (p.project_type = 'in_house' OR p.project_type IS NULL OR p.project_type = '')";
+} elseif ($fundingTypeFilter === 'funding_agency' || $fundingTypeFilter === 'external') {
+    $sql .= " AND p.project_type = 'funding_agency'";
+}
+
+if ($divisionFilter > 0) {
+    $sql .= " AND p.department_id = ?";
+    $params[] = $divisionFilter;
 }
 
 $sql .= " ORDER BY p.id ASC";
@@ -76,22 +96,24 @@ $unassigned = [
 ];
 
 // Helper to resolve program key from institute_priority_area
-function resolve_program_letter(?string $area): string {
-    if (empty($area)) return 'A';
-    $clean = strtoupper(trim($area));
-    if (in_array($clean, ['A', 'B', 'C', 'D', 'E', 'F'])) {
-        return $clean;
+if (!function_exists('resolve_program_letter')) {
+    function resolve_program_letter(?string $area): string {
+        if (empty($area)) return 'A';
+        $clean = strtoupper(trim($area));
+        if (in_array($clean, ['A', 'B', 'C', 'D', 'E', 'F'])) {
+            return $clean;
+        }
+        if (preg_match('/(?:PROGRAM\s*|^)([A-F])\b/i', $clean, $m)) {
+            return strtoupper($m[1]);
+        }
+        if (stripos($clean, 'basic') !== false || stripos($clean, 'viksit') !== false || stripos($clean, 'policy') !== false || stripos($clean, 'translational') !== false) return 'A';
+        if (stripos($clean, 'germplasm') !== false || stripos($clean, 'computational') !== false || stripos($clean, 'biotechnological') !== false || stripos($clean, 'breeding') !== false || stripos($clean, 'embryo') !== false) return 'B';
+        if (stripos($clean, 'climate') !== false || stripos($clean, 'silage') !== false || stripos($clean, 'processing') !== false || stripos($clean, 'resilient') !== false) return 'C';
+        if (stripos($clean, 'functional') !== false || stripos($clean, 'circular') !== false || stripos($clean, 'packaging') !== false || stripos($clean, 'bioactive') !== false || stripos($clean, 'whey') !== false) return 'D';
+        if (stripos($clean, 'one health') !== false || stripos($clean, 'amr') !== false || stripos($clean, 'safety') !== false || stripos($clean, 'biosensor') !== false || stripos($clean, 'mastitis') !== false || stripos($clean, 'quality milk') !== false) return 'E';
+        if (stripos($clean, 'demand') !== false || stripos($clean, 'extension') !== false || stripos($clean, 'shg') !== false || stripos($clean, 'dissemination') !== false || stripos($clean, 'capacity') !== false || stripos($clean, 'stakeholder') !== false) return 'F';
+        return 'A';
     }
-    if (preg_match('/(?:PROGRAM\s*|^)([A-F])\b/i', $clean, $m)) {
-        return strtoupper($m[1]);
-    }
-    if (stripos($clean, 'basic') !== false || stripos($clean, 'viksit') !== false || stripos($clean, 'policy') !== false || stripos($clean, 'translational') !== false) return 'A';
-    if (stripos($clean, 'germplasm') !== false || stripos($clean, 'computational') !== false || stripos($clean, 'biotechnological') !== false || stripos($clean, 'breeding') !== false || stripos($clean, 'embryo') !== false) return 'B';
-    if (stripos($clean, 'climate') !== false || stripos($clean, 'silage') !== false || stripos($clean, 'processing') !== false || stripos($clean, 'resilient') !== false) return 'C';
-    if (stripos($clean, 'functional') !== false || stripos($clean, 'circular') !== false || stripos($clean, 'packaging') !== false || stripos($clean, 'bioactive') !== false || stripos($clean, 'whey') !== false) return 'D';
-    if (stripos($clean, 'one health') !== false || stripos($clean, 'amr') !== false || stripos($clean, 'safety') !== false || stripos($clean, 'biosensor') !== false || stripos($clean, 'mastitis') !== false || stripos($clean, 'quality milk') !== false) return 'E';
-    if (stripos($clean, 'demand') !== false || stripos($clean, 'extension') !== false || stripos($clean, 'shg') !== false || stripos($clean, 'dissemination') !== false || stripos($clean, 'capacity') !== false || stripos($clean, 'stakeholder') !== false) return 'F';
-    return 'A';
 }
 
 $totalProposalsCount = count($proposals);
