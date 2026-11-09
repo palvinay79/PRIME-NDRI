@@ -135,7 +135,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $institutePriority = strtoupper($rawPriority);
     }
-    $nationalPriority = sanitize($_POST['national_priority_area'] ?? '');
+    $nationalPrioritySelect = trim(sanitize($_POST['national_priority_area_select'] ?? ''));
+    $nationalPriorityOther = trim(sanitize($_POST['national_priority_area_other'] ?? ''));
+    if ($nationalPrioritySelect === 'OTHER') {
+        $nationalPriority = $nationalPriorityOther;
+    } else {
+        $nationalPriority = $nationalPrioritySelect ?: trim(sanitize($_POST['national_priority_area'] ?? ''));
+    }
     $trlLevel = (int)($_POST['trl_level'] ?? 1);
 
     $researchProblem = sanitize($_POST['research_problem'] ?? '');
@@ -767,10 +773,48 @@ include __DIR__ . '/../includes/header.php';
                     </select>
                     <div class="form-text text-muted extra-small">Mandatory selection from institutional research programs A through F.</div>
                 </div>
-                <div class="col-md-12">
-                    <label class="form-label small fw-semibold text-secondary">National Priority Area <span class="text-danger">*</span></label>
-                    <input type="text" name="national_priority_area" class="form-control" placeholder="Enter National Priority Area..." value="<?= e($proposal['national_priority_area'] ?? '') ?>" required>
-                    <div class="form-text text-muted extra-small">Specify the relevant National Priority Area, mission, or initiative.</div>
+                <?php
+                $nationalAreasList = get_national_priority_areas();
+                $currentNatPriority = $proposal['national_priority_area'] ?? ($nationalPriority ?? '');
+                $selectedNatPriorityVal = '';
+                $isOtherNatPriority = false;
+                $otherNatPriorityVal = '';
+                if (!empty($currentNatPriority)) {
+                    if (in_array($currentNatPriority, $nationalAreasList, true)) {
+                        $selectedNatPriorityVal = $currentNatPriority;
+                    } else {
+                        $selectedNatPriorityVal = 'OTHER';
+                        $isOtherNatPriority = true;
+                        $otherNatPriorityVal = $currentNatPriority;
+                    }
+                }
+                if (isset($_POST['national_priority_area_select']) && $_POST['national_priority_area_select'] === 'OTHER') {
+                    $selectedNatPriorityVal = 'OTHER';
+                    $isOtherNatPriority = true;
+                    $otherNatPriorityVal = trim(sanitize($_POST['national_priority_area_other'] ?? ''));
+                }
+                ?>
+                <div class="<?= $isOtherNatPriority ? 'col-md-6' : 'col-12' ?>" id="national_priority_select_col">
+                    <label for="national_priority_area_select" class="form-label small fw-semibold text-secondary">
+                        National Priority Area <span class="text-danger">*</span>
+                    </label>
+                    <select name="national_priority_area_select" id="national_priority_area_select" class="form-select" onchange="handleNationalPriorityChange()" required>
+                        <option value="">-- Select National Priority Area --</option>
+                        <?php foreach ($nationalAreasList as $nIndex => $nArea): ?>
+                            <option value="<?= e($nArea) ?>" <?= ($selectedNatPriorityVal === $nArea) ? 'selected' : '' ?>>
+                                <?= ($nIndex + 1) ?>. <?= e($nArea) ?>
+                            </option>
+                        <?php endforeach; ?>
+                        <option value="OTHER" <?= ($selectedNatPriorityVal === 'OTHER') ? 'selected' : '' ?>>Other National Priority Area (Specify)</option>
+                    </select>
+                    <div class="form-text text-muted extra-small">Select the relevant national thrust area or select Other to specify.</div>
+                </div>
+                <div class="col-md-6" id="national_priority_other_wrapper" style="<?= $isOtherNatPriority ? '' : 'display: none;' ?>">
+                    <label for="national_priority_area_other" class="form-label small fw-semibold text-secondary">
+                        Specify National Priority Area <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" name="national_priority_area_other" id="national_priority_area_other" class="form-control" placeholder="Enter custom National Priority Area..." value="<?= e($otherNatPriorityVal) ?>" <?= $isOtherNatPriority ? 'required' : '' ?>>
+                    <div class="form-text text-muted extra-small">Enter custom national priority area.</div>
                 </div>
             </div>
         </div>
@@ -1975,6 +2019,36 @@ function handleFundingAgencyChange() {
     }
 }
 
+function handleNationalPriorityChange() {
+    const sel = document.getElementById('national_priority_area_select');
+    const otherCol = document.getElementById('national_priority_other_wrapper');
+    const otherInput = document.getElementById('national_priority_area_other');
+    const selectCol = document.getElementById('national_priority_select_col');
+
+    if (!sel) return;
+
+    if (sel.value === 'OTHER') {
+        if (otherCol) otherCol.style.display = 'block';
+        if (selectCol) {
+            selectCol.classList.remove('col-12');
+            selectCol.classList.add('col-md-6');
+        }
+        if (otherInput) {
+            otherInput.required = true;
+            otherInput.focus();
+        }
+    } else {
+        if (otherCol) otherCol.style.display = 'none';
+        if (selectCol) {
+            selectCol.classList.remove('col-md-6');
+            selectCol.classList.add('col-12');
+        }
+        if (otherInput) {
+            otherInput.required = false;
+        }
+    }
+}
+
 // --- 3. Toggle Funding Agency Input & Budget Formulation Mode ---
 window.toggleFundingAgencyInput = function() {
     const fundingRadio = document.getElementById('type_funding_agency');
@@ -2064,6 +2138,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     toggleFundingAgencyInput();
     handleFundingAgencyChange();
+    handleNationalPriorityChange();
 
     // B. Project Duration Listeners
     const startInput = document.getElementById('proposed_start_date');
@@ -2234,6 +2309,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const fundingRadio = document.getElementById('type_funding_agency');
             const isFunding = fundingRadio ? fundingRadio.checked : false;
+
+            // Validate National Priority Area
+            const natPrioritySel = document.getElementById('national_priority_area_select');
+            const natPriorityOther = document.getElementById('national_priority_area_other');
+            if (natPrioritySel && !natPrioritySel.value) {
+                e.preventDefault();
+                natPrioritySel.focus();
+                natPrioritySel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                alert('Please select a National Priority Area.');
+                return false;
+            }
+            if (natPrioritySel && natPrioritySel.value === 'OTHER' && (!natPriorityOther || !natPriorityOther.value.trim())) {
+                e.preventDefault();
+                if (natPriorityOther) {
+                    natPriorityOther.focus();
+                    natPriorityOther.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                alert('Please specify the custom National Priority Area.');
+                return false;
+            }
 
             if (isFunding) {
                 const agencySel = document.getElementById('funding_agency_select');

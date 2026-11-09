@@ -923,6 +923,14 @@ function get_external_funding_agencies(): array {
 }
 
 /**
+ * Get the list of standard national priority areas
+ */
+function get_national_priority_areas(): array {
+    global $NATIONAL_PRIORITY_AREAS;
+    return $NATIONAL_PRIORITY_AREAS ?? [];
+}
+
+/**
  * Get funding agency details including agency name and styled badges.
  */
 function get_funding_agency_details($item): array {

@@ -216,7 +216,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $institutePriority = strtoupper($rawPriority ?: 'A');
         }
-        $nationalPriority = !empty($_POST['national_priority_area']) ? sanitize($_POST['national_priority_area']) : ($dbProj['national_priority_area'] ?: '');
+        $nationalPrioritySelect = trim(sanitize($_POST['national_priority_area_select'] ?? ''));
+        $nationalPriorityOther = trim(sanitize($_POST['national_priority_area_other'] ?? ''));
+        if ($nationalPrioritySelect === 'OTHER') {
+            $nationalPriority = $nationalPriorityOther;
+        } elseif (!empty($nationalPrioritySelect)) {
+            $nationalPriority = $nationalPrioritySelect;
+        } else {
+            $nationalPriority = !empty($_POST['national_priority_area']) ? sanitize($_POST['national_priority_area']) : ($dbProj['national_priority_area'] ?: '');
+        }
         $trlLevel = !empty($_POST['trl_level']) ? (int)$_POST['trl_level'] : (int)($dbProj['trl_level'] ?: 3);
 
         $startDate = !empty($_POST['proposed_start_date']) ? $_POST['proposed_start_date'] : $dbProj['start_date'];
@@ -245,7 +253,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $institutePriority = strtoupper($rawPriority);
         }
-        $nationalPriority = sanitize($_POST['national_priority_area'] ?? '');
+        $nationalPrioritySelect = trim(sanitize($_POST['national_priority_area_select'] ?? ''));
+        $nationalPriorityOther = trim(sanitize($_POST['national_priority_area_other'] ?? ''));
+        if ($nationalPrioritySelect === 'OTHER') {
+            $nationalPriority = $nationalPriorityOther;
+        } else {
+            $nationalPriority = $nationalPrioritySelect ?: trim(sanitize($_POST['national_priority_area'] ?? ''));
+        }
         $trlLevel = (int)($_POST['trl_level'] ?? 1);
         $submissionRemarks = trim(sanitize($_POST['submission_remarks'] ?? ''));
 
@@ -881,9 +895,48 @@ include __DIR__ . '/../includes/header.php';
                             </select>
                         </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label small fw-semibold text-secondary">National Priority Area <span class="text-danger">*</span></label>
-                            <input type="text" name="national_priority_area" id="national_priority_area" class="form-control" placeholder="Relevant National Priority Area..." value="<?= e($nationalPriority) ?>" <?= !$selectedProject ? 'required' : '' ?>>
+                        <?php
+                        $nationalAreasList = get_national_priority_areas();
+                        $currentNatPriority = $nationalPriority ?? '';
+                        $selectedNatPriorityVal = '';
+                        $isOtherNatPriority = false;
+                        $otherNatPriorityVal = '';
+                        if (!empty($currentNatPriority)) {
+                            if (in_array($currentNatPriority, $nationalAreasList, true)) {
+                                $selectedNatPriorityVal = $currentNatPriority;
+                            } else {
+                                $selectedNatPriorityVal = 'OTHER';
+                                $isOtherNatPriority = true;
+                                $otherNatPriorityVal = $currentNatPriority;
+                            }
+                        }
+                        if (isset($_POST['national_priority_area_select']) && $_POST['national_priority_area_select'] === 'OTHER') {
+                            $selectedNatPriorityVal = 'OTHER';
+                            $isOtherNatPriority = true;
+                            $otherNatPriorityVal = trim(sanitize($_POST['national_priority_area_other'] ?? ''));
+                        }
+                        ?>
+                        <div class="col-md-6" id="national_priority_select_col">
+                            <label for="national_priority_area_select" class="form-label small fw-semibold text-secondary">
+                                National Priority Area <span class="text-danger">*</span>
+                            </label>
+                            <select name="national_priority_area_select" id="national_priority_area_select" class="form-select" onchange="handleNationalPriorityChange()" <?= !$selectedProject ? 'required' : '' ?>>
+                                <option value="">-- Select National Priority Area --</option>
+                                <?php foreach ($nationalAreasList as $nIndex => $nArea): ?>
+                                    <option value="<?= e($nArea) ?>" <?= ($selectedNatPriorityVal === $nArea) ? 'selected' : '' ?>>
+                                        <?= ($nIndex + 1) ?>. <?= e($nArea) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                                <option value="OTHER" <?= ($selectedNatPriorityVal === 'OTHER') ? 'selected' : '' ?>>Other National Priority Area (Specify)</option>
+                            </select>
+                            <div class="form-text text-muted extra-small">Select the relevant national thrust area or select Other to specify.</div>
+                        </div>
+                        <div class="col-12" id="national_priority_other_wrapper" style="<?= $isOtherNatPriority ? '' : 'display: none;' ?>">
+                            <label for="national_priority_area_other" class="form-label small fw-semibold text-secondary">
+                                Specify National Priority Area <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="national_priority_area_other" id="national_priority_area_other" class="form-control" placeholder="Enter custom National Priority Area..." value="<?= e($otherNatPriorityVal) ?>" <?= ($isOtherNatPriority && !$selectedProject) ? 'required' : '' ?>>
+                            <div class="form-text text-muted extra-small">Enter custom national priority area.</div>
                         </div>
                     </div>
                 </div>
@@ -1283,7 +1336,9 @@ function handleDbProjectSelection(selectedVal) {
     const projectCodeInput = document.getElementById('project_number');
     const trlSelect = document.getElementById('trl_level');
     const prioritySelect = document.getElementById('institute_priority_area');
-    const nationalInput = document.getElementById('national_priority_area');
+    const nationalSelect = document.getElementById('national_priority_area_select');
+    const nationalOther = document.getElementById('national_priority_area_other');
+    const nationalOtherCol = document.getElementById('national_priority_other_wrapper');
     const startDateInput = document.getElementById('proposed_start_date');
     const endDateInput = document.getElementById('proposed_end_date');
     const budgetAllocInput = document.getElementById('budget_allocated');
@@ -1302,7 +1357,8 @@ function handleDbProjectSelection(selectedVal) {
         if (startDateInput) startDateInput.required = true;
         if (endDateInput) endDateInput.required = true;
         if (budgetAllocInput) budgetAllocInput.required = true;
-        if (nationalInput) nationalInput.required = true;
+        if (nationalSelect) nationalSelect.required = true;
+        handleNationalPriorityChange();
 
         toggleFundingAgencyInput();
         calculateProjectDuration();
@@ -1434,7 +1490,30 @@ function handleDbProjectSelection(selectedVal) {
         prioritySelect.value = proj.institute_priority_area;
         prioritySelect.required = false;
     }
-    if (nationalInput) nationalInput.value = proj.national_priority_area;
+    if (nationalSelect) {
+        nationalSelect.required = false;
+        const natVal = proj.national_priority_area || '';
+        let found = false;
+        for (let opt of nationalSelect.options) {
+            if (opt.value && opt.value === natVal) {
+                nationalSelect.value = natVal;
+                found = true;
+                break;
+            }
+        }
+        if (!found && natVal) {
+            nationalSelect.value = 'OTHER';
+            if (nationalOtherCol) nationalOtherCol.style.display = 'block';
+            if (nationalOther) nationalOther.value = natVal;
+        } else if (found) {
+            if (nationalOtherCol) nationalOtherCol.style.display = 'none';
+            if (nationalOther) nationalOther.value = '';
+        } else {
+            nationalSelect.value = '';
+            if (nationalOtherCol) nationalOtherCol.style.display = 'none';
+            if (nationalOther) nationalOther.value = '';
+        }
+    }
     if (trlSelect) trlSelect.value = proj.trl_level;
 
     if (proj.project_type === 'funding_agency') {
@@ -1539,6 +1618,29 @@ function handleFundingAgencyChange() {
             selectCol.classList.remove('col-md-6');
             selectCol.classList.add('col-12');
         }
+        if (otherInput) {
+            otherInput.required = false;
+        }
+    }
+}
+
+function handleNationalPriorityChange() {
+    const sel = document.getElementById('national_priority_area_select');
+    const otherCol = document.getElementById('national_priority_other_wrapper');
+    const otherInput = document.getElementById('national_priority_area_other');
+    const hiddenId = document.getElementById('linked_project_id');
+    const isManual = !hiddenId || !hiddenId.value;
+
+    if (!sel) return;
+
+    if (sel.value === 'OTHER') {
+        if (otherCol) otherCol.style.display = 'block';
+        if (otherInput) {
+            otherInput.required = isManual;
+            otherInput.focus();
+        }
+    } else {
+        if (otherCol) otherCol.style.display = 'none';
         if (otherInput) {
             otherInput.required = false;
         }
@@ -2198,6 +2300,7 @@ document.addEventListener('DOMContentLoaded', () => {
             handleDbProjectSelection(selectElem.value);
         } else {
             toggleFundingAgencyInput();
+            handleNationalPriorityChange();
             calculateProjectDuration();
             calculateBudgetUtilization();
         }
@@ -2228,6 +2331,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (draftActionInput) draftActionInput.value = 'draft';
                 form.querySelectorAll('[required]').forEach(el => el.removeAttribute('required'));
                 return true;
+            }
+
+            // Validate National Priority Area
+            const hiddenId = document.getElementById('linked_project_id');
+            const isManual = !hiddenId || !hiddenId.value;
+            const natPrioritySel = document.getElementById('national_priority_area_select');
+            const natPriorityOther = document.getElementById('national_priority_area_other');
+            if (isManual && natPrioritySel && !natPrioritySel.value) {
+                e.preventDefault();
+                natPrioritySel.focus();
+                natPrioritySel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                alert('Please select a National Priority Area.');
+                return false;
+            }
+            if (natPrioritySel && natPrioritySel.value === 'OTHER' && (!natPriorityOther || !natPriorityOther.value.trim())) {
+                e.preventDefault();
+                if (natPriorityOther) {
+                    natPriorityOther.focus();
+                    natPriorityOther.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                alert('Please specify the custom National Priority Area.');
+                return false;
             }
 
             // Word count limit for Final Report on submit

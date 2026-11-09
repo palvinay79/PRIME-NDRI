@@ -135,11 +135,21 @@ $INSTITUTE_PRIORITY_AREAS = [
 ];
 
 $NATIONAL_PRIORITY_AREAS = [
-    'National Dairy Plan / Rashtriya Gokul Mission',
-    'Sustainable Livestock Production',
-    'Greenhouse Gas Mitigation in Ruminants',
-    'Import Substitution & Export Quality Dairy Products',
-    'Farmer Livelihood & Women Empowerment in Dairy'
+    'Artificial Intelligence and Machine Learning - AI, deep learning, data science, intelligent systems and predictive modelling.',
+    'Advanced Materials and Nanotechnology - Nanomaterials, smart materials, functional materials and 2D materials.',
+    'Renewable Energy and Clean Energy - Solar energy, hydrogen energy, energy storage, fuel cells and battery technologies.',
+    'Climate Change and Environmental Sustainability - Pollution control, waste management, climate modelling and environmental remediation.',
+    'Healthcare and Medical Technology - Diagnostics, biomedical devices, drug discovery, biotechnology and public health.',
+    'Agriculture and Food Security - Precision agriculture, crop improvement, sustainable farming and food processing.',
+    'Water and Sanitation - Water purification, wastewater treatment, water conservation and groundwater management.',
+    'Electronics and Semiconductor Technology - Semiconductor devices, sensors, microelectronics and advanced electronics.',
+    'Quantum Science and Technology - Quantum computing, quantum communication and quantum materials.',
+    'Advanced Manufacturing and Robotics - Smart manufacturing, automation, robotics and industrial innovation.',
+    'Biotechnology and Molecular Biology - Synthetic biology, genetic engineering, bioinformatics and biomanufacturing.',
+    'Defence and Strategic Technologies - Advanced sensors, materials, cybersecurity and indigenous technologies.',
+    'Sustainable Infrastructure - Smart cities, construction materials and resilient infrastructure.',
+    'Cybersecurity and Digital Technologies - Secure communication, data protection and digital innovation.',
+    'Social Sciences and Interdisciplinary Research - Technology for rural development, education, social inclusion and public policy.'
 ];
 
 // External Funding Agencies List (Standard 20 Agencies + Other)
