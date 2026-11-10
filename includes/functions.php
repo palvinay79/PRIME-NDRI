@@ -394,6 +394,144 @@ function render_proposal_category_badge(?string $category, bool $includeIcon = t
 }
 
 /**
+ * Renders an elevated, prominent project title banner for review and detail views.
+ * Elevates the research project title above card sections with clear taxonomy, investigator details,
+ * and duration/budget metrics.
+ */
+function render_project_title_banner(array $proposal, array $copis = []): string {
+    $cat = $proposal['proposal_category'] ?? 'new';
+    $isCompleted = ($cat === 'completed');
+    $isOngoing = ($cat === 'ongoing');
+    $progKey = resolve_program_letter($proposal['institute_priority_area'] ?? '');
+    $isFundingAgency = (($proposal['project_type'] ?? '') === 'funding_agency');
+
+    // Status styling
+    $status = $proposal['current_status'] ?? '';
+    $statusClass = 'bg-warning-subtle text-warning-emphasis border-warning-subtle';
+    if (in_array($status, [STATUS_APPROVED_ACTIVE, STATUS_APPROVED_IRC, STATUS_COMPLETED])) {
+        $statusClass = 'bg-success-subtle text-success border-success-subtle';
+    } elseif (in_array($status, [STATUS_RETURNED_HOD, STATUS_RETURNED_JD, STATUS_NOT_APPROVED_ARCHIVED])) {
+        $statusClass = 'bg-danger-subtle text-danger border-danger-subtle';
+    }
+
+    $html = '<div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-left: 5px solid #1a365d !important; border-radius: 8px;">';
+    $html .= '<div class="card-body p-4">';
+
+    // 1. Taxonomy & Badges row
+    $html .= '<div class="d-flex flex-wrap align-items-center gap-2 mb-2">';
+    $html .= render_proposal_category_badge($cat);
+
+    $html .= '<span class="badge bg-light text-primary border font-monospace px-2 py-1" style="font-size: 0.80rem;" title="Proposal Submission Number">';
+    $html .= '<i class="bi bi-file-earmark-text me-1"></i>' . e($proposal['proposal_number']);
+    $html .= '</span>';
+
+    if (!empty($proposal['project_number'])) {
+        $html .= '<span class="badge bg-dark-subtle text-dark border font-monospace px-2 py-1" style="font-size: 0.80rem;" title="Official Project Sanction Code">';
+        $html .= '<i class="bi bi-tag-fill me-1 text-primary"></i>Code: ' . e($proposal['project_number']);
+        $html .= '</span>';
+    }
+
+    $html .= '<span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-2 py-1" style="font-size: 0.80rem;">';
+    $html .= '<i class="bi bi-bookmark-star-fill me-1"></i>Program ' . e($progKey);
+    $html .= '</span>';
+
+    if ($isFundingAgency) {
+        $agencyDetails = get_funding_agency_details($proposal);
+        $agencyLabel = !empty($agencyDetails['agency_name']) ? $agencyDetails['agency_name'] : ($proposal['funding_agency'] ?: 'Externally Funded');
+        $html .= '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.80rem;">';
+        $html .= '<i class="bi bi-bank2 me-1"></i>' . e($agencyLabel);
+        $html .= '</span>';
+    } else {
+        $html .= '<span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.80rem;">';
+        $html .= '<i class="bi bi-house-door text-primary me-1"></i>In-house Project';
+        $html .= '</span>';
+    }
+
+    if (!empty($proposal['progress_report_period'])) {
+        $html .= '<span class="badge bg-info text-dark font-monospace px-2 py-1" style="font-size: 0.80rem;">';
+        $html .= '<i class="bi bi-calendar-check me-1"></i>Period: ' . e($proposal['progress_report_period']);
+        $html .= '</span>';
+    }
+
+    if (!empty($proposal['trl_level'])) {
+        $html .= '<span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size: 0.80rem;">';
+        $html .= 'TRL-' . (int)$proposal['trl_level'];
+        $html .= '</span>';
+    }
+
+    $html .= '<span class="badge border ms-auto ' . $statusClass . ' px-2.5 py-1" style="font-size: 0.80rem;">';
+    $html .= '<i class="bi bi-info-circle me-1"></i>' . e($status);
+    $html .= '</span>';
+
+    $html .= '</div>'; // End badges row
+
+    // 2. High-Readability Research Project Title
+    $html .= '<h2 class="fw-bold text-dark my-2.5" style="font-size: 1.45rem; line-height: 1.35; letter-spacing: -0.01em;">';
+    $html .= e($proposal['title']);
+    $html .= '</h2>';
+
+    // 3. Metadata Bar (PI, Department, Duration, Budget, Co-PIs)
+    $html .= '<div class="d-flex flex-wrap align-items-center gap-3 pt-3 mt-1 border-top text-muted small">';
+
+    $html .= '<div>';
+    $html .= '<i class="bi bi-person-fill text-primary me-1"></i>';
+    $html .= '<strong class="text-dark">PI:</strong> ' . e($proposal['scientist_name'] ?? 'Scientist');
+    if (!empty($proposal['scientist_designation'])) {
+        $html .= ' <span class="text-muted">(' . e($proposal['scientist_designation']) . ')</span>';
+    }
+    $html .= '</div>';
+
+    $html .= '<div class="text-secondary opacity-50">&bull;</div>';
+
+    $html .= '<div>';
+    $html .= '<i class="bi bi-building text-secondary me-1"></i>';
+    $html .= '<strong class="text-dark">Division:</strong> ' . e($proposal['department_name'] ?? '');
+    if (!empty($proposal['department_code'])) {
+        $html .= ' <span class="badge bg-light text-dark border font-monospace ms-1">' . e($proposal['department_code']) . '</span>';
+    }
+    $html .= '</div>';
+
+    if (!empty($copis)) {
+        $html .= '<div class="text-secondary opacity-50">&bull;</div>';
+        $html .= '<div>';
+        $html .= '<i class="bi bi-people text-info me-1"></i>';
+        $html .= '<strong class="text-dark">Co-PIs:</strong> ' . count($copis) . ' Co-Investigator(s)';
+        $html .= '</div>';
+    }
+
+    if (!empty($proposal['proposed_start_date'])) {
+        $html .= '<div class="text-secondary opacity-50">&bull;</div>';
+        $html .= '<div>';
+        $html .= '<i class="bi bi-calendar-range text-muted me-1"></i>';
+        $html .= '<strong class="text-dark">Duration:</strong> ' . format_date($proposal['proposed_start_date']) . ' &rarr; ' . format_date($proposal['proposed_end_date']);
+        $durStr = format_duration($proposal['proposed_start_date'], $proposal['proposed_end_date']);
+        if ($durStr && $durStr !== 'Not specified') {
+            $html .= ' <span class="text-muted">(' . e($durStr) . ')</span>';
+        }
+        $html .= '</div>';
+    }
+
+    $html .= '<div class="text-secondary opacity-50">&bull;</div>';
+    $html .= '<div>';
+    $html .= '<i class="bi bi-currency-rupee text-success me-1"></i>';
+    if ($isCompleted || $isOngoing) {
+        $alloc = (float)($proposal['budget_allocated'] ?: $proposal['proposed_budget']);
+        $util = (float)($proposal['budget_utilized'] ?? 0);
+        $html .= '<strong class="text-dark">Allocated:</strong> ' . format_currency($alloc) . ' | <strong class="text-dark">Utilized:</strong> ' . format_currency($util);
+    } else {
+        $html .= '<strong class="text-dark">Proposed Outlay:</strong> ' . format_currency((float)$proposal['proposed_budget']);
+    }
+    $html .= '</div>';
+
+    $html .= '</div>'; // End metadata bar
+
+    $html .= '</div>'; // End card-body
+    $html .= '</div>'; // End card
+
+    return $html;
+}
+
+/**
  * Record action in immutable audit log
  */
 function log_audit(?int $userId, string $action, string $entityType, ?int $entityId, ?string $details = null): void {

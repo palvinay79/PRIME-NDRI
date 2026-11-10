@@ -375,8 +375,8 @@ include __DIR__ . '/../includes/header.php';
                     </span>
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border mb-2 text-dark font-monospace" style="white-space: pre-wrap; line-height: 1.6; font-size: 0.92rem;">
-                        <?= e($proposal['progress_report'] ?: 'No progress report summary entered.') ?>
+                    <div class="p-3 bg-light rounded border mb-2 text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['progress_report'], 'No progress report summary entered.') ?>
                     </div>
                     <?php 
                         $pWords = !empty($proposal['progress_report']) ? count(preg_split('/\s+/', trim(strip_tags($proposal['progress_report'])))) : 0;
@@ -393,8 +393,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-trophy text-warning"></i> Significant Achievements During This Reporting Period
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['significant_achievements'] ?: 'None recorded.') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['significant_achievements'], 'None recorded.') ?>
                     </div>
                 </div>
             </div>
@@ -405,8 +405,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-clipboard-check text-primary"></i> Action Taken Report (ATR) on Previous IRC Recommendations
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['previous_irc_atr'] ?: 'N/A (No prior recommendations recorded).') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['previous_irc_atr'], 'N/A (No prior recommendations recorded).') ?>
                     </div>
                 </div>
             </div>
@@ -417,8 +417,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-box-seam text-info"></i> Project Output / Outcome (Publications, Technologies, Data)
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['output_outcome'] ?: 'None specified.') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['output_outcome'], 'None specified.') ?>
                     </div>
                 </div>
             </div>
@@ -427,11 +427,11 @@ include __DIR__ . '/../includes/header.php';
             <?php if (!empty($proposal['other_details'])): ?>
                 <div class="detail-section-card">
                     <div class="detail-section-header">
-                        <i class="bi bi-info-circle text-secondary"></i> Other Details & Work Plan Ahead
+                        <i class="bi bi-info-circle text-secondary"></i> Other Details &amp; Work Plan Ahead
                     </div>
                     <div class="detail-section-body">
-                        <div class="p-3 bg-light rounded border text-secondary" style="white-space: pre-wrap; line-height: 1.6;">
-                            <?= e($proposal['other_details']) ?>
+                        <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                            <?= render_rich_text($proposal['other_details']) ?>
                         </div>
                     </div>
                 </div>

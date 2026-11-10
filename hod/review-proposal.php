@@ -187,32 +187,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
     <div>
         <div class="d-flex align-items-center gap-2 mb-1">
-            <?= render_proposal_category_badge($proposal['proposal_category'] ?? 'new') ?>
+            <span class="badge bg-primary text-white"><i class="bi bi-shield-check me-1"></i>HOD Evaluation Stage</span>
             <h3 class="fw-bold mb-0 text-dark">
                 <?php if (($proposal['proposal_category'] ?? '') === 'ongoing'): ?>
-                    Head of Department (HOD) Evaluation: Progress Report
+                    Progress Report Evaluation &amp; Recommendation
                 <?php elseif (($proposal['proposal_category'] ?? '') === 'completed'): ?>
-                    Head of Department (HOD) Evaluation: Completion Report
+                    Completion Report Evaluation &amp; Endorsement
                 <?php else: ?>
-                    Head of Department (HOD) Proposal Evaluation
+                    New Research Proposal Evaluation &amp; Endorsement
                 <?php endif; ?>
             </h3>
         </div>
-        <p class="text-muted small mb-0">
-            Evaluating <?= e($proposal['proposal_number']) ?> &mdash; <?= e($proposal['title']) ?>
-            <?php if (!empty($proposal['progress_report_period'])): ?>
-                | Period: <span class="badge bg-info text-dark font-monospace"><?= e($proposal['progress_report_period']) ?></span>
-            <?php endif; ?>
-            <?php if (!empty($proposal['project_number'])): ?>
-                | Code: <span class="badge bg-dark-subtle text-dark font-monospace"><?= e($proposal['project_number']) ?></span>
-            <?php endif; ?>
-        </p>
+        <p class="text-muted small mb-0">Official departmental review, scientific evaluation, and endorsement for Institute Research Council (IRC) deliberation</p>
     </div>
     <div class="d-flex gap-2">
-        <a href="#record-decision-section" class="btn btn-warning btn-sm fw-semibold text-dark">
+        <a href="#record-decision-section" class="btn btn-warning btn-sm fw-semibold text-dark shadow-sm">
             <i class="bi bi-arrow-down-circle me-1"></i> Jump to Decision
         </a>
         <a href="<?= url("/export-doc.php?id=" . ($id) . "") ?>" class="btn btn-outline-secondary btn-sm" title="Download Office Open XML Document (.docx)">
@@ -231,6 +223,9 @@ include __DIR__ . '/../includes/header.php';
     </div>
 <?php endif; ?>
 
+<!-- Prominent Research Project Title & Summary Banner -->
+<?= render_project_title_banner($proposal, $copis) ?>
+
 <!-- Proposal Details Summary -->
 <div class="row g-4">
     <div class="col-lg-8">
@@ -244,9 +239,8 @@ include __DIR__ . '/../includes/header.php';
                     </span>
                 </div>
                 <div class="detail-section-body">
-                    <h4 class="fw-bold text-dark mb-3"><?= e($proposal['title']) ?></h4>
-                    <div class="p-3 bg-light rounded border mb-2 text-dark font-monospace" style="white-space: pre-wrap; line-height: 1.6; font-size: 0.92rem;">
-                        <?= e($proposal['final_report'] ?: 'No final report summary entered.') ?>
+                    <div class="p-3 bg-light rounded border mb-2 text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['final_report'], 'No final report summary entered.') ?>
                     </div>
                     <?php 
                         $reportWords = !empty($proposal['final_report']) ? count(preg_split('/\s+/', trim(strip_tags($proposal['final_report'])))) : 0;
@@ -262,8 +256,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-trophy text-warning"></i> Significant Achievements
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['significant_achievements'] ?: 'None recorded.') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['significant_achievements'], 'None recorded.') ?>
                     </div>
                 </div>
             </div>
@@ -273,19 +267,19 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-clipboard-check text-primary"></i> Action Taken Report (ATR) on Previous IRC Recommendations
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['previous_irc_atr'] ?: 'N/A (No prior recommendations recorded).') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['previous_irc_atr'], 'N/A (No prior recommendations recorded).') ?>
                     </div>
                 </div>
             </div>
 
             <div class="detail-section-card">
                 <div class="detail-section-header">
-                    <i class="bi bi-box-seam text-info"></i> Project Deliverables & Output / Outcome
+                    <i class="bi bi-box-seam text-info"></i> Project Deliverables &amp; Output / Outcome
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['output_outcome'] ?: 'None specified.') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['output_outcome'], 'None specified.') ?>
                     </div>
                 </div>
             </div>
@@ -293,11 +287,11 @@ include __DIR__ . '/../includes/header.php';
             <?php if (!empty($proposal['other_details'])): ?>
                 <div class="detail-section-card">
                     <div class="detail-section-header">
-                        <i class="bi bi-info-circle text-secondary"></i> Other Details & Remarks
+                        <i class="bi bi-info-circle text-secondary"></i> Other Details &amp; Remarks
                     </div>
                     <div class="detail-section-body">
-                        <div class="p-3 bg-light rounded border text-secondary" style="white-space: pre-wrap; line-height: 1.6;">
-                            <?= e($proposal['other_details']) ?>
+                        <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                            <?= render_rich_text($proposal['other_details']) ?>
                         </div>
                     </div>
                 </div>
@@ -319,9 +313,8 @@ include __DIR__ . '/../includes/header.php';
                     </span>
                 </div>
                 <div class="detail-section-body">
-                    <h4 class="fw-bold text-dark mb-3"><?= e($proposal['title']) ?></h4>
-                    <div class="p-3 bg-light rounded border mb-2 text-dark font-monospace" style="white-space: pre-wrap; line-height: 1.6; font-size: 0.92rem;">
-                        <?= e($proposal['progress_report'] ?: 'No progress report summary entered.') ?>
+                    <div class="p-3 bg-light rounded border mb-2 text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['progress_report'], 'No progress report summary entered.') ?>
                     </div>
                     <?php 
                         $pWords = !empty($proposal['progress_report']) ? count(preg_split('/\s+/', trim(strip_tags($proposal['progress_report'])))) : 0;
@@ -338,8 +331,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-trophy text-warning"></i> Significant Achievements During This Reporting Period
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['significant_achievements'] ?: 'None recorded.') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['significant_achievements'], 'None recorded.') ?>
                     </div>
                 </div>
             </div>
@@ -350,8 +343,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-clipboard-check text-primary"></i> Action Taken Report (ATR) on Previous IRC Recommendations
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['previous_irc_atr'] ?: 'N/A (No prior recommendations recorded).') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['previous_irc_atr'], 'N/A (No prior recommendations recorded).') ?>
                     </div>
                 </div>
             </div>
@@ -362,8 +355,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-box-seam text-info"></i> Project Output / Outcome (Publications, Technologies, Data)
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="white-space: pre-wrap; line-height: 1.6;">
-                        <?= e($proposal['output_outcome'] ?: 'None specified.') ?>
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['output_outcome'], 'None specified.') ?>
                     </div>
                 </div>
             </div>
@@ -371,11 +364,11 @@ include __DIR__ . '/../includes/header.php';
             <?php if (!empty($proposal['other_details'])): ?>
                 <div class="detail-section-card">
                     <div class="detail-section-header">
-                        <i class="bi bi-info-circle text-secondary"></i> Other Details & Remarks
+                        <i class="bi bi-info-circle text-secondary"></i> Other Details &amp; Remarks
                     </div>
                     <div class="detail-section-body">
-                        <div class="p-3 bg-light rounded border text-secondary" style="white-space: pre-wrap; line-height: 1.6;">
-                            <?= e($proposal['other_details']) ?>
+                        <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                            <?= render_rich_text($proposal['other_details']) ?>
                         </div>
                     </div>
                 </div>
@@ -384,10 +377,9 @@ include __DIR__ . '/../includes/header.php';
         <?php else: ?>
             <div class="detail-section-card">
                 <div class="detail-section-header">
-                    <i class="bi bi-journal-text text-primary"></i> Proposal Overview & Objectives
+                    <i class="bi bi-journal-text text-primary"></i> Proposal Overview &amp; Objectives
                 </div>
                 <div class="detail-section-body">
-                    <h4 class="fw-bold text-dark mb-3"><?= e($proposal['title']) ?></h4>
                     <div class="mb-3">
                         <strong class="small text-muted text-uppercase d-block mb-1">Specific Objectives:</strong>
                         <div class="bg-light p-3 rounded rich-text-preview small">

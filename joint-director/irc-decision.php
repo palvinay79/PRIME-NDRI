@@ -63,6 +63,8 @@ if ($linkedProjectId > 0) {
     }
 }
 
+$copis = get_proposal_copis($id, $linkedProjectId, (string)($proposal['project_number'] ?? ''));
+
 // Real-time AJAX uniqueness check endpoint for Joint Director
 if (isset($_GET['check_unique'])) {
     header('Content-Type: application/json');
@@ -505,24 +507,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
     <div>
         <div class="d-flex align-items-center gap-2 mb-1">
-            <?= render_proposal_category_badge($proposal['proposal_category'] ?? 'new') ?>
+            <span class="badge bg-success text-white"><i class="bi bi-award-fill me-1"></i>IRC Council Deliberation</span>
             <h3 class="fw-bold mb-0 text-dark">
                 <?php if ($isOngoingProposal): ?>
-                    Institute Research Council (IRC) &mdash; Progress Report Decision
+                    Progress Report Sanction &amp; Continuation Review
                 <?php elseif ($isCompletedProposal): ?>
-                    Institute Research Council (IRC) &mdash; Project Completion Decision
+                    Project Completion Sanction &amp; Closure Review
                 <?php else: ?>
-                    Institute Research Council (IRC) &mdash; Final Decision
+                    New Research Proposal Sanction &amp; Project Code Allocation
                 <?php endif; ?>
             </h3>
         </div>
         <p class="text-muted small mb-0">Record the official council consensus, grant sanction, and active project charter</p>
     </div>
     <div class="d-flex gap-2">
-        <a href="<?= url('/export-jdr-irc.php?type=new') ?>" class="btn btn-primary btn-sm fw-semibold" title="Export all new proposals slated for IRC meeting as a compiled JDR document in Word (.docx) format">
+        <a href="<?= url('/export-jdr-irc.php?type=' . urlencode($proposal['proposal_category'] ?? 'new')) ?>" class="btn btn-primary btn-sm fw-semibold" title="Export all proposals slated for IRC meeting as a compiled JDR document in Word (.docx) format">
             <i class="bi bi-file-earmark-word-fill me-1"></i> Export JDR Dossier (.docx)
         </a>
         <a href="<?= url("/export-doc.php?id=" . ($id) . "") ?>" class="btn btn-outline-secondary btn-sm" title="Download Office Open XML Document (.docx)">
@@ -540,6 +542,9 @@ include __DIR__ . '/../includes/header.php';
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
 <?php endif; ?>
+
+<!-- Prominent Research Project Title & Summary Banner -->
+<?= render_project_title_banner($proposal, $copis) ?>
 
 <!-- Decision Form Box -->
 <div class="card shadow-sm border-0 mb-4" style="border-top: 4px solid #10b981 !important;">
