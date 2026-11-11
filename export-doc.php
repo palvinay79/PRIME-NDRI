@@ -169,6 +169,25 @@ class DocxBuilder {
             $this->addParagraph('Not specified', false, '64748B');
             return;
         }
+        // Convert sup and sub tags to unicode representations so they preserve correctly in Word document
+        $charMapSup = [
+            '0'=>'⁰','1'=>'¹','2'=>'²','3'=>'³','4'=>'⁴','5'=>'⁵','6'=>'⁶','7'=>'⁷','8'=>'⁸','9'=>'⁹',
+            '+'=>'⁺','-'=>'⁻','='=>'⁼','('=>'⁽',')'=>'⁾','n'=>'ⁿ','i'=>'ⁱ','x'=>'ˣ','y'=>'ʸ','r'=>'ʳ','t'=>'ᵗ'
+        ];
+        $charMapSub = [
+            '0'=>'₀','1'=>'₁','2'=>'₂','3'=>'₃','4'=>'₄','5'=>'₅','6'=>'₆','7'=>'₇','8'=>'₈','9'=>'₉',
+            '+'=>'₊','-'=>'₋','='=>'₌','('=>'₍',')'=>'₎','a'=>'ₐ','e'=>'ₑ','o'=>'ₒ','x'=>'ₓ','h'=>'ₕ',
+            'k'=>'ₖ','l'=>'ₗ','m'=>'ₘ','n'=>'ₙ','p'=>'ₚ','s'=>'ₛ','t'=>'ₜ'
+        ];
+        $raw = preg_replace_callback('/<sup[^>]*>(.*?)<\/sup>/is', function($m) use ($charMapSup) {
+            $inner = strip_tags($m[1]);
+            return strtr($inner, $charMapSup);
+        }, $raw);
+        $raw = preg_replace_callback('/<sub[^>]*>(.*?)<\/sub>/is', function($m) use ($charMapSub) {
+            $inner = strip_tags($m[1]);
+            return strtr($inner, $charMapSub);
+        }, $raw);
+
         // Convert html elements to clean text representation for docx
         $formatted = preg_replace('/<\s*li[^>]*>/i', "• ", $raw);
         $formatted = preg_replace('/<\s*\/\s*li\s*>/i', "\n", $formatted);

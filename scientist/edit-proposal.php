@@ -1324,8 +1324,13 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </form>
 
-<!-- CKEditor 5 CDN -->
-<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/classic/ckeditor.js"></script>
+<!-- CKEditor 5 Super-Build CDN (Supports Subscript, Superscript, Underline, Strikethrough) -->
+<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/super-build/ckeditor.js"></script>
+<script>
+if (typeof CKEDITOR !== 'undefined' && CKEDITOR.ClassicEditor) {
+    window.ClassicEditor = CKEDITOR.ClassicEditor;
+}
+</script>
 
 <script>
 // Portal scientists array for Co-PI selection
@@ -2168,21 +2173,33 @@ document.addEventListener('DOMContentLoaded', function() {
     let technicalProgramEditor = null;
     let expectedOutcomesEditor = null;
 
-    if (typeof ClassicEditor !== 'undefined') {
+    const EditorEngine = (typeof CKEDITOR !== 'undefined' && CKEDITOR.ClassicEditor) ? CKEDITOR.ClassicEditor : (typeof ClassicEditor !== 'undefined' ? ClassicEditor : null);
+    if (EditorEngine) {
         const editorConfig = {
-            toolbar: [
-                'heading', '|',
-                'bold', 'italic', 'underline', 'strikethrough', '|',
-                'bulletedList', 'numberedList', '|',
-                'outdent', 'indent', '|',
-                'insertTable', 'blockQuote', '|',
-                'undo', 'redo'
+            toolbar: {
+                items: [
+                    'heading', '|',
+                    'bold', 'italic', 'underline', 'strikethrough', 'subscript', 'superscript', '|',
+                    'bulletedList', 'numberedList', '|',
+                    'outdent', 'indent', '|',
+                    'insertTable', 'blockQuote', '|',
+                    'undo', 'redo'
+                ],
+                shouldNotGroupWhenFull: true
+            },
+            removePlugins: [
+                'AIAssistant', 'CKBox', 'CKFinder', 'EasyImage', 'MultiLevelList',
+                'RealTimeCollaborativeComments', 'RealTimeCollaborativeTrackChanges',
+                'RealTimeCollaborativeRevisionHistory', 'PresenceList', 'Comments',
+                'TrackChanges', 'TrackChangesData', 'RevisionHistory', 'Pagination',
+                'WProofreader', 'MathType', 'SlashCommand', 'Template', 'DocumentOutline',
+                'FormatPainter', 'TableOfContents', 'PasteFromOfficeEnhanced', 'CaseChange'
             ]
         };
 
         const objEl = document.querySelector('#objectives');
         if (objEl) {
-            ClassicEditor
+            EditorEngine
                 .create(objEl, editorConfig)
                 .then(editor => {
                     objectivesEditor = editor;
@@ -2197,7 +2214,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const techEl = document.querySelector('#technical_program');
         if (techEl) {
-            ClassicEditor
+            EditorEngine
                 .create(techEl, editorConfig)
                 .then(editor => {
                     technicalProgramEditor = editor;
@@ -2214,7 +2231,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const eoEl = document.querySelector('#expected_outcomes');
         if (eoEl) {
-            ClassicEditor
+            EditorEngine
                 .create(eoEl, editorConfig)
                 .then(editor => {
                     expectedOutcomesEditor = editor;

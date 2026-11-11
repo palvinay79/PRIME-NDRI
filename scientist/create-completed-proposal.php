@@ -1366,8 +1366,13 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </form>
 
-<!-- CKEditor 5 CDN -->
-<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/classic/ckeditor.js"></script>
+<!-- CKEditor 5 Super-Build CDN (Supports Subscript, Superscript, Underline, Strikethrough) -->
+<script src="https://cdn.ckeditor.com/ckeditor5/41.1.0/super-build/ckeditor.js"></script>
+<script>
+if (typeof CKEDITOR !== 'undefined' && CKEDITOR.ClassicEditor) {
+    window.ClassicEditor = CKEDITOR.ClassicEditor;
+}
+</script>
 
 <script>
 // Portal scientists for Co-PIs
@@ -2375,21 +2380,33 @@ let finalReportEditor = null;
 let achievementsEditor = null;
 let outputOutcomeEditor = null;
 
-if (typeof ClassicEditor !== 'undefined') {
+const EditorEngine = (typeof CKEDITOR !== 'undefined' && CKEDITOR.ClassicEditor) ? CKEDITOR.ClassicEditor : (typeof ClassicEditor !== 'undefined' ? ClassicEditor : null);
+if (EditorEngine) {
     const editorConfig = {
-        toolbar: [
-            'heading', '|',
-            'bold', 'italic', 'underline', 'strikethrough', '|',
-            'bulletedList', 'numberedList', '|',
-            'outdent', 'indent', '|',
-            'insertTable', 'blockQuote', '|',
-            'undo', 'redo'
+        toolbar: {
+            items: [
+                'heading', '|',
+                'bold', 'italic', 'underline', 'strikethrough', 'subscript', 'superscript', '|',
+                'bulletedList', 'numberedList', '|',
+                'outdent', 'indent', '|',
+                'insertTable', 'blockQuote', '|',
+                'undo', 'redo'
+            ],
+            shouldNotGroupWhenFull: true
+        },
+        removePlugins: [
+            'AIAssistant', 'CKBox', 'CKFinder', 'EasyImage', 'MultiLevelList',
+            'RealTimeCollaborativeComments', 'RealTimeCollaborativeTrackChanges',
+            'RealTimeCollaborativeRevisionHistory', 'PresenceList', 'Comments',
+            'TrackChanges', 'TrackChangesData', 'RevisionHistory', 'Pagination',
+            'WProofreader', 'MathType', 'SlashCommand', 'Template', 'DocumentOutline',
+            'FormatPainter', 'TableOfContents', 'PasteFromOfficeEnhanced', 'CaseChange'
         ]
     };
 
     const objEl = document.querySelector('#objectives');
     if (objEl) {
-        ClassicEditor.create(objEl, editorConfig)
+        EditorEngine.create(objEl, editorConfig)
             .then(editor => {
                 objectivesEditor = editor;
                 editor.model.document.on('change:data', () => {
@@ -2401,7 +2418,7 @@ if (typeof ClassicEditor !== 'undefined') {
 
     const atrEl = document.querySelector('#previous_irc_atr');
     if (atrEl) {
-        ClassicEditor.create(atrEl, editorConfig)
+        EditorEngine.create(atrEl, editorConfig)
             .then(editor => {
                 previousIrcAtrEditor = editor;
                 editor.model.document.on('change:data', () => {
@@ -2415,7 +2432,7 @@ if (typeof ClassicEditor !== 'undefined') {
 
     const frEl = document.querySelector('#final_report');
     if (frEl) {
-        ClassicEditor.create(frEl, editorConfig)
+        EditorEngine.create(frEl, editorConfig)
             .then(editor => {
                 finalReportEditor = editor;
                 editor.model.document.on('change:data', () => {
@@ -2429,7 +2446,7 @@ if (typeof ClassicEditor !== 'undefined') {
 
     const achEl = document.querySelector('#significant_achievements');
     if (achEl) {
-        ClassicEditor.create(achEl, editorConfig)
+        EditorEngine.create(achEl, editorConfig)
             .then(editor => {
                 achievementsEditor = editor;
                 editor.model.document.on('change:data', () => {
@@ -2443,7 +2460,7 @@ if (typeof ClassicEditor !== 'undefined') {
 
     const outEl = document.querySelector('#output_outcome');
     if (outEl) {
-        ClassicEditor.create(outEl, editorConfig)
+        EditorEngine.create(outEl, editorConfig)
             .then(editor => {
                 outputOutcomeEditor = editor;
                 editor.model.document.on('change:data', () => {

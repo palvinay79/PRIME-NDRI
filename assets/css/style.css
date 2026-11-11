@@ -381,3 +381,20 @@ body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
+/* Subscript and Superscript Typography across Editor & Display */
+sub, .rich-text-content sub, .ck.ck-content sub {
+    font-size: 75% !important;
+    line-height: 0 !important;
+    position: relative !important;
+    vertical-align: baseline !important;
+    bottom: -0.25em !important;
+}
+
+sup, .rich-text-content sup, .ck.ck-content sup {
+    font-size: 75% !important;
+    line-height: 0 !important;
+    position: relative !important;
+    vertical-align: baseline !important;
+    top: -0.5em !important;
+}
+
