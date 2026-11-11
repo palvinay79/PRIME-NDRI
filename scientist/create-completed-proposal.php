@@ -104,15 +104,7 @@ if ($editProposalId > 0) {
 }
 
 $linkedProjectId = (int)($editProposal['linked_project_id'] ?? ($_GET['project_id'] ?? ($_POST['linked_project_id'] ?? 0)));
-if ($linkedProjectId <= 0 && !empty($activeProjects) && empty($_POST) && !$editProposal && !isset($_GET['manual'])) {
-    // Only auto-select by default if the current user is the lead Principal Investigator (or HOD)
-    foreach ($activeProjects as $p) {
-        if ((int)$p['scientist_id'] === $userId || $isHod) {
-            $linkedProjectId = (int)$p['id'];
-            break;
-        }
-    }
-}
+// Note: No project is selected by default on page load. User must explicitly choose from dropdown or select manual entry.
 $selectedProject = null;
 $projectType = $editProposal['project_type'] ?? 'in_house';
 $fundingAgency = $editProposal['funding_agency'] ?? '';
@@ -124,6 +116,7 @@ $projectCode = $editProposal['project_number'] ?? '';
 $title = $editProposal['title'] ?? '';
 $startDate = $editProposal['proposed_start_date'] ?? '';
 $endDate = $editProposal['proposed_end_date'] ?? '';
+$objectives = $editProposal['objectives'] ?? '';
 $achievements = $editProposal['significant_achievements'] ?? '';
 $budgetAllocated = $editProposal['budget_allocated'] ?? ($editProposal['proposed_budget'] ?? '');
 $budgetUtilized = isset($editProposal['budget_utilized']) && $editProposal['budget_utilized'] !== null ? $editProposal['budget_utilized'] : '';
@@ -182,6 +175,7 @@ if ($linkedProjectId > 0 && !$editProposal) {
         $institutePriority = $selectedProject['institute_priority_area'] ?: 'A';
         $nationalPriority = $selectedProject['national_priority_area'] ?: '';
         $trlLevel = (int)($selectedProject['trl_level'] ?: 3);
+        $objectives = $selectedProject['objectives'] ?: '';
     }
 }
 
@@ -272,9 +266,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $startDate = !empty($_POST['proposed_start_date']) ? $_POST['proposed_start_date'] : null;
         $endDate = !empty($_POST['proposed_end_date']) ? $_POST['proposed_end_date'] : null;
         $budgetAllocated = (float)($_POST['budget_allocated'] ?? 0);
-        $origObjectives = '';
     }
 
+    $objectives = sanitize_html($_POST['objectives'] ?? '');
     $achievements = sanitize_html($_POST['significant_achievements'] ?? '');
     $budgetUtilized = (float)($_POST['budget_utilized'] ?? 0);
     $finalReport = sanitize_html($_POST['final_report'] ?? '');
@@ -288,12 +282,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $additionalFundsRequested = (float)($_POST['additional_funds_requested'] ?? 0);
     $extensionJustification = trim(sanitize($_POST['extension_justification'] ?? ''));
 
-    // Word count check for Final Report (max 250 words)
-    $cleanReportText = strip_tags($finalReport);
-    $cleanReportText = html_entity_decode($cleanReportText, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $cleanReportText = preg_replace('/[\s\u00A0\u2000-\u200B]+/u', ' ', $cleanReportText);
-    $cleanReportText = trim($cleanReportText);
-    $wordCount = !empty($cleanReportText) ? count(preg_split('/\s+/', $cleanReportText)) : 0;
+    // Word counts calculation
+    $cleanReportText = trim(preg_replace('/[\s\x{00A0}\x{2000}-\x{200B}]+/u', ' ', html_entity_decode(strip_tags($finalReport), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+    $finalReportWords = !empty($cleanReportText) ? count(preg_split('/\s+/', $cleanReportText)) : 0;
+
+    $cleanAtrText = trim(preg_replace('/[\s\x{00A0}\x{2000}-\x{200B}]+/u', ' ', html_entity_decode(strip_tags($previousIrcAtr), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+    $atrWords = !empty($cleanAtrText) ? count(preg_split('/\s+/', $cleanAtrText)) : 0;
+
+    $cleanAchievementsText = trim(preg_replace('/[\s\x{00A0}\x{2000}-\x{200B}]+/u', ' ', html_entity_decode(strip_tags($achievements), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+    $achievementsWords = !empty($cleanAchievementsText) ? count(preg_split('/\s+/', $cleanAchievementsText)) : 0;
+
+    $cleanOutcomeText = trim(preg_replace('/[\s\x{00A0}\x{2000}-\x{200B}]+/u', ' ', html_entity_decode(strip_tags($outputOutcome), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+    $outputOutcomeWords = !empty($cleanOutcomeText) ? count(preg_split('/\s+/', $cleanOutcomeText)) : 0;
+
+    $cleanOtherDetailsText = trim(preg_replace('/[\s\x{00A0}\x{2000}-\x{200B}]+/u', ' ', html_entity_decode(strip_tags($otherDetails), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+    $otherDetailsWords = !empty($cleanOtherDetailsText) ? count(preg_split('/\s+/', $cleanOtherDetailsText)) : 0;
 
     // Fetch target department code
     $effectiveDeptId = $deptId ?: (int)($currentUser['department_id'] ?: 1);
@@ -329,18 +332,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Sanctioned Budget Allocated is mandatory and must be greater than zero.";
         } elseif (!isset($_POST['budget_utilized']) || trim($_POST['budget_utilized']) === '') {
             $error = "Actual Budget Utilized is mandatory.";
-        } elseif (empty(trim(strip_tags($achievements)))) {
-            $error = "Significant Achievements are mandatory.";
-        } elseif (empty(trim(strip_tags($finalReport)))) {
-            $error = "Final Report is mandatory.";
-        } elseif ($wordCount > 250) {
-            $error = "Final Report must be strictly 250 words or less. Current word count is " . $wordCount . " words.";
+        } elseif (empty(trim(strip_tags($objectives)))) {
+            $error = "Objectives is mandatory.";
         } elseif (empty(trim(strip_tags($previousIrcAtr)))) {
             $error = "Action Taken Report (ATR) on Recommendations of Previous IRC is mandatory (enter 'N/A' if not applicable).";
+        } elseif ($atrWords > 40) {
+            $error = "Action Taken Report (ATR) must be 40 words or less. Current word count is " . $atrWords . " words.";
+        } elseif (empty(trim(strip_tags($finalReport)))) {
+            $error = "Final Report is mandatory.";
+        } elseif ($finalReportWords > 250) {
+            $error = "Final Report must be strictly 250 words or less. Current word count is " . $finalReportWords . " words.";
+        } elseif (empty(trim(strip_tags($achievements)))) {
+            $error = "Significant Achievements are mandatory.";
+        } elseif ($achievementsWords > 70) {
+            $error = "Significant Achievements must be 70 words or less. Current word count is " . $achievementsWords . " words.";
         } elseif (empty(trim(strip_tags($outputOutcome)))) {
             $error = "Output / Outcome is mandatory.";
+        } elseif ($outputOutcomeWords > 70) {
+            $error = "Output / Outcome must be 70 words or less. Current word count is " . $outputOutcomeWords . " words.";
         } elseif (empty($otherDetails)) {
             $error = "Other Details field is mandatory (enter 'N/A' if not applicable).";
+        } elseif ($otherDetailsWords > 50) {
+            $error = "Other Details must be 50 words or less. Current word count is " . $otherDetailsWords . " words.";
         } elseif ($extensionRequested && empty($extendedEndDate)) {
             $error = "Proposed Extended End Date is mandatory when requesting a project extension.";
         } elseif ($extensionRequested && !empty($endDate) && strtotime($extendedEndDate) <= strtotime($endDate)) {
@@ -391,6 +404,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         proposed_budget = ?, yearly_budget = ?, budget_allocated = ?, budget_utilized = ?, final_report = ?, previous_irc_atr = ?,
                         output_outcome = ?, other_details = ?, submission_remarks = ?, linked_project_id = ?, extension_requested = ?,
                         extended_end_date = ?, additional_funds_requested = ?, extension_justification = ?,
+                        objectives = ?,
                         current_status = ?, submitted_at = CASE WHEN ? IS NOT NULL THEN ? ELSE submitted_at END, updated_at = ?
                     WHERE id = ?
                 ");
@@ -421,6 +435,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $extendedEndDate,
                     $additionalFundsRequested,
                     $extensionJustification,
+                    $objectives,
                     $targetStatus,
                     $submittedAt,
                     $submittedAt,
@@ -473,7 +488,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $extendedEndDate,
                     $additionalFundsRequested,
                     $extensionJustification,
-                    $origObjectives,
+                    $objectives,
                     $targetStatus,
                     $submittedAt,
                     $now,
@@ -1134,25 +1149,46 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <!-- Section 4: Final Report, Significant Achievements & ATR -->
+    <!-- Section 4: Project Objectives, Action Taken Report, Final Report & Achievements -->
     <div class="detail-section-card">
         <div class="detail-section-header">
-            <i class="bi bi-file-earmark-text text-primary"></i> 4. Final Report & Achievements
+            <i class="bi bi-file-earmark-text text-primary"></i> 4. Project Objectives, Final Report & Achievements
         </div>
         <div class="detail-section-body">
-            <div class="row g-3">
-                <!-- Significant Achievements -->
+            <div class="row g-4">
+                <!-- 1. Objectives (with CKEditor) -->
                 <div class="col-12">
-                    <label for="significant_achievements" class="form-label small fw-semibold text-secondary">Significant Achievements <span class="text-danger">*</span></label>
-                    <textarea name="significant_achievements" id="significant_achievements" class="form-control" rows="5" placeholder="Highlight key scientific breakthroughs, technologies developed, optimized protocols, patents, or germplasm evaluated..."><?= e($achievements) ?></textarea>
-                    <div class="form-text text-muted extra-small">Detail the most significant scientific accomplishments achieved during the project tenure.</div>
+                    <label for="objectives" class="form-label small fw-bold text-dark mb-1">
+                        1. Objectives <span class="text-danger">*</span>
+                    </label>
+                    <textarea name="objectives" id="objectives" class="form-control" rows="4" placeholder="Detail the specific research objectives and scientific mandate of the project..."><?= e($objectives) ?></textarea>
+                    <div class="form-text text-muted extra-small">State the primary approved scientific objectives of the project.</div>
                 </div>
 
-                <!-- Final Report (250 words only) -->
+                <!-- 2. Action Taken Report (ATR) on Recommendations Made by the House in Previous IRC (max 40 words) -->
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label for="previous_irc_atr" class="form-label small fw-bold text-dark m-0">
+                            2. Action Taken Report (ATR) on Recommendations Made by the House in Previous IRC (if any) <span class="text-danger">*</span>
+                        </label>
+                        <span id="previous_irc_atr_counter" class="badge bg-light text-primary border fw-semibold">
+                            <i class="bi bi-chat-left-text me-1"></i> 0 / 40 words
+                        </span>
+                    </div>
+                    <textarea name="previous_irc_atr" id="previous_irc_atr" class="form-control" rows="3" placeholder="Provide point-wise Action Taken Report (ATR) addressing any recommendations, observations, or directives given by previous IRC meetings... (Enter 'N/A' if not applicable)"><?= e($previousIrcAtr) ?></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <div class="form-text text-muted extra-small">Specify action taken on previous council directives. Maximum 40 words. If not applicable, mention 'N/A'.</div>
+                        <div id="atr_limit_warning" class="text-danger small fw-bold" style="display: none;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded!
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Final Report (max 250 words) -->
                 <div class="col-12">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <label for="final_report" class="form-label small fw-bold text-dark m-0">
-                            Final Report (Maximum 250 Words) <span class="text-danger">*</span>
+                            3. Final Report (Executive Summary) <span class="text-danger">*</span>
                         </label>
                         <span id="final_report_counter" class="badge bg-light text-primary border fw-semibold">
                             <i class="bi bi-chat-left-text me-1"></i> 0 / 250 words
@@ -1163,7 +1199,7 @@ include __DIR__ . '/../includes/header.php';
                               class="form-control font-monospace" 
                               rows="6" 
                               placeholder="Executive summary of the completed project (background, methodologies, major findings, and conclusions). Must not exceed 250 words..." 
-                              oninput="updateWordCount()"><?= e($finalReport) ?></textarea>
+                              oninput="updateWordCounts()"><?= e($finalReport) ?></textarea>
                     <div class="d-flex justify-content-between align-items-center mt-1">
                         <div class="form-text text-muted extra-small">Strict 250-word executive summary for institutional records and IRC proceedings.</div>
                         <div id="word_limit_warning" class="text-danger small fw-bold" style="display: none;">
@@ -1172,27 +1208,61 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
 
-                <!-- ATR on Recommendations made by the House in previous IRC if any -->
+                <!-- 4. Significant Achievements (max 70 words) -->
                 <div class="col-12">
-                    <label for="previous_irc_atr" class="form-label small fw-semibold text-secondary">
-                        Action Taken Report (ATR) on Recommendations Made by the House in Previous IRC (if any) <span class="text-danger">*</span>
-                    </label>
-                    <textarea name="previous_irc_atr" id="previous_irc_atr" class="form-control" rows="4" placeholder="Provide point-wise Action Taken Report (ATR) addressing any recommendations, observations, or directives given by previous IRC meetings... (Enter 'N/A' if not applicable)"><?= e($previousIrcAtr) ?></textarea>
-                    <div class="form-text text-muted extra-small">Specify action taken on previous council directives. If not applicable, mention 'N/A'.</div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label for="significant_achievements" class="form-label small fw-bold text-dark m-0">
+                            4. Significant Achievements <span class="text-danger">*</span>
+                        </label>
+                        <span id="achievements_counter" class="badge bg-light text-primary border fw-semibold">
+                            <i class="bi bi-chat-left-text me-1"></i> 0 / 70 words
+                        </span>
+                    </div>
+                    <textarea name="significant_achievements" id="significant_achievements" class="form-control" rows="4" placeholder="Highlight key scientific breakthroughs, technologies developed, optimized protocols, patents, or germplasm evaluated (Max 70 words)..."><?= e($achievements) ?></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <div class="form-text text-muted extra-small">Detail the most significant scientific accomplishments achieved during the project tenure. Maximum 70 words.</div>
+                        <div id="achievements_limit_warning" class="text-danger small fw-bold" style="display: none;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded!
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Output / Outcome -->
+                <!-- 5. Output / Outcome (max 70 words) -->
                 <div class="col-12">
-                    <label for="output_outcome" class="form-label small fw-semibold text-secondary">Output / Outcome <span class="text-danger">*</span></label>
-                    <textarea name="output_outcome" id="output_outcome" class="form-control" rows="4" placeholder="List concrete research deliverables: publications (NAAS rated), technologies commercialized/transferred, prototypes, human resource trained, policy briefs..."><?= e($outputOutcome) ?></textarea>
-                    <div class="form-text text-muted extra-small">Quantifiable deliverables and outcomes generated from this completed project.</div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label for="output_outcome" class="form-label small fw-bold text-dark m-0">
+                            5. Output / Outcome <span class="text-danger">*</span>
+                        </label>
+                        <span id="output_outcome_counter" class="badge bg-light text-primary border fw-semibold">
+                            <i class="bi bi-chat-left-text me-1"></i> 0 / 70 words
+                        </span>
+                    </div>
+                    <textarea name="output_outcome" id="output_outcome" class="form-control" rows="4" placeholder="List concrete research deliverables: publications (NAAS rated), technologies commercialized/transferred, prototypes, human resource trained, policy briefs (Max 70 words)..."><?= e($outputOutcome) ?></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <div class="form-text text-muted extra-small">Quantifiable deliverables and outcomes generated from this completed project. Maximum 70 words.</div>
+                        <div id="output_limit_warning" class="text-danger small fw-bold" style="display: none;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded!
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Other Details if any -->
+                <!-- 6. Other Details (max 50 words) -->
                 <div class="col-12">
-                    <label for="other_details" class="form-label small fw-semibold text-secondary">Other Details (if any) <span class="text-danger">*</span></label>
-                    <textarea name="other_details" id="other_details" class="form-control" rows="2" placeholder="Any additional remarks, collaborations, external funding acknowledgments, or handover notes... (Enter 'N/A' if not applicable)" required><?= e($otherDetails) ?></textarea>
-                    <div class="form-text text-muted extra-small">Any additional remarks. If not applicable, enter 'N/A'.</div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label for="other_details" class="form-label small fw-bold text-dark m-0">
+                            6. Other Details (if any) <span class="text-danger">*</span>
+                        </label>
+                        <span id="other_details_counter" class="badge bg-light text-primary border fw-semibold">
+                            <i class="bi bi-chat-left-text me-1"></i> 0 / 50 words
+                        </span>
+                    </div>
+                    <textarea name="other_details" id="other_details" class="form-control" rows="3" placeholder="Any additional remarks, collaborations, external funding acknowledgments, or handover notes... (Enter 'N/A' if not applicable. Max 50 words)" required oninput="updateWordCounts()"><?= e($otherDetails) ?></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <div class="form-text text-muted extra-small">Any additional remarks. Maximum 50 words. If not applicable, enter 'N/A'.</div>
+                        <div id="other_details_limit_warning" class="text-danger small fw-bold" style="display: none;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Word limit exceeded!
+                        </div>
+                    </div>
                 </div>
 
             </div>
@@ -1331,6 +1401,7 @@ const ACTIVE_PROJECTS = <?= json_encode(array_map(function($p) {
         'yearly_budget' => $p['yearly_budget'] ?: ($p['prop_yearly_budget'] ?? null),
         'yearly_budget_html' => render_yearly_budget_html($p['yearly_budget'] ?: ($p['prop_yearly_budget'] ?? null), (float)$p['approved_budget']),
         'title' => $p['proposal_title'] ?: ($p['title'] ?: ''),
+        'objectives' => $p['objectives'] ?: '',
         'department_id' => (int)$p['department_id'],
         'department_name' => $p['department_name'] ?: '',
         'start_date' => $p['start_date'] ?: '',
@@ -1534,6 +1605,13 @@ function handleDbProjectSelection(selectedVal) {
     if (titleInput) {
         titleInput.value = proj.title;
         titleInput.required = false;
+    }
+    if (proj.objectives) {
+        if (typeof objectivesEditor !== 'undefined' && objectivesEditor) {
+            objectivesEditor.setData(proj.objectives);
+        }
+        const objInput = document.getElementById('objectives');
+        if (objInput) objInput.value = proj.objectives;
     }
     if (deptSelect) {
         deptSelect.value = proj.department_id;
@@ -1836,11 +1914,9 @@ function calculateBudgetUtilization() {
     }
 }
 
-// Word count tracking for 250-word final report
-function updateWordCount() {
-    const textInput = document.getElementById('final_report');
-    if (!textInput) return 0;
-    let text = (typeof finalReportEditor !== 'undefined' && finalReportEditor) ? finalReportEditor.getData() : textInput.value;
+// Comprehensive Word Count Tracking for all fields with strict limits
+function countTextWords(text) {
+    if (!text) return 0;
     if (text.includes('<') && text.includes('>')) {
         const temp = document.createElement('div');
         temp.innerHTML = text;
@@ -1849,25 +1925,53 @@ function updateWordCount() {
         text = text.trim();
     }
     text = text.replace(/[\s\u00A0\u2000-\u200B]+/g, ' ').trim();
-    const words = text.length > 0 ? text.split(/\s+/).filter(w => w.length > 0).length : 0;
-    const counter = document.getElementById('final_report_counter');
-    const warning = document.getElementById('word_limit_warning');
+    return text.length > 0 ? text.split(/\s+/).filter(w => w.length > 0).length : 0;
+}
+
+function updateFieldCounter(text, counterId, warningId, maxWords) {
+    const words = countTextWords(text);
+    const counter = document.getElementById(counterId);
+    const warning = document.getElementById(warningId);
 
     if (counter) {
-        counter.innerHTML = `<i class="bi bi-chat-left-text me-1"></i> ${words} / 250 words`;
+        counter.innerHTML = `<i class="bi bi-chat-left-text me-1"></i> ${words} / ${maxWords} words`;
 
-        if (words > 250) {
+        if (words > maxWords) {
             counter.className = 'badge bg-danger text-white border fw-bold';
             if (warning) {
                 warning.style.display = 'block';
-                warning.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i> Exceeds limit by ${words - 250} word(s)! Please shorten.`;
+                warning.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i> Exceeds limit by ${words - maxWords} word(s)! Please shorten.`;
             }
         } else {
-            counter.className = words >= 200 ? 'badge bg-warning-subtle text-warning border fw-semibold' : 'badge bg-light text-primary border fw-semibold';
+            counter.className = (words >= maxWords * 0.8) ? 'badge bg-warning-subtle text-dark border fw-semibold' : 'badge bg-light text-primary border fw-semibold';
             if (warning) warning.style.display = 'none';
         }
     }
     return words;
+}
+
+function updateWordCounts() {
+    const atrText = (typeof previousIrcAtrEditor !== 'undefined' && previousIrcAtrEditor) ? previousIrcAtrEditor.getData() : (document.getElementById('previous_irc_atr')?.value || '');
+    updateFieldCounter(atrText, 'previous_irc_atr_counter', 'atr_limit_warning', 40);
+
+    const frText = (typeof finalReportEditor !== 'undefined' && finalReportEditor) ? finalReportEditor.getData() : (document.getElementById('final_report')?.value || '');
+    updateFieldCounter(frText, 'final_report_counter', 'word_limit_warning', 250);
+
+    const achText = (typeof achievementsEditor !== 'undefined' && achievementsEditor) ? achievementsEditor.getData() : (document.getElementById('significant_achievements')?.value || '');
+    updateFieldCounter(achText, 'achievements_counter', 'achievements_limit_warning', 70);
+
+    const outText = (typeof outputOutcomeEditor !== 'undefined' && outputOutcomeEditor) ? outputOutcomeEditor.getData() : (document.getElementById('output_outcome')?.value || '');
+    updateFieldCounter(outText, 'output_outcome_counter', 'output_limit_warning', 70);
+
+    const othText = document.getElementById('other_details')?.value || '';
+    updateFieldCounter(othText, 'other_details_counter', 'other_details_limit_warning', 50);
+}
+
+// Backwards-compatible alias for final report
+function updateWordCount() {
+    updateWordCounts();
+    const frText = (typeof finalReportEditor !== 'undefined' && finalReportEditor) ? finalReportEditor.getData() : (document.getElementById('final_report')?.value || '');
+    return countTextWords(frText);
 }
 
 // --- Co-PI Management (Searchable Combobox for 150+ Scientists + External) ---
@@ -2265,9 +2369,10 @@ function escapeHtml(text) {
 }
 
 // --- CKEditor 5 Initialization ---
-let achievementsEditor = null;
-let finalReportEditor = null;
+let objectivesEditor = null;
 let previousIrcAtrEditor = null;
+let finalReportEditor = null;
+let achievementsEditor = null;
 let outputOutcomeEditor = null;
 
 if (typeof ClassicEditor !== 'undefined') {
@@ -2282,30 +2387,16 @@ if (typeof ClassicEditor !== 'undefined') {
         ]
     };
 
-    const achEl = document.querySelector('#significant_achievements');
-    if (achEl) {
-        ClassicEditor.create(achEl, editorConfig)
+    const objEl = document.querySelector('#objectives');
+    if (objEl) {
+        ClassicEditor.create(objEl, editorConfig)
             .then(editor => {
-                achievementsEditor = editor;
+                objectivesEditor = editor;
                 editor.model.document.on('change:data', () => {
-                    achEl.value = editor.getData();
+                    objEl.value = editor.getData();
                 });
             })
-            .catch(err => console.warn('CKEditor Significant Achievements Init:', err));
-    }
-
-    const frEl = document.querySelector('#final_report');
-    if (frEl) {
-        ClassicEditor.create(frEl, editorConfig)
-            .then(editor => {
-                finalReportEditor = editor;
-                editor.model.document.on('change:data', () => {
-                    frEl.value = editor.getData();
-                    updateWordCount();
-                });
-                setTimeout(updateWordCount, 300);
-            })
-            .catch(err => console.warn('CKEditor Final Report Init:', err));
+            .catch(err => console.warn('CKEditor Objectives Init:', err));
     }
 
     const atrEl = document.querySelector('#previous_irc_atr');
@@ -2315,9 +2406,39 @@ if (typeof ClassicEditor !== 'undefined') {
                 previousIrcAtrEditor = editor;
                 editor.model.document.on('change:data', () => {
                     atrEl.value = editor.getData();
+                    updateWordCounts();
                 });
+                setTimeout(updateWordCounts, 300);
             })
             .catch(err => console.warn('CKEditor Previous IRC ATR Init:', err));
+    }
+
+    const frEl = document.querySelector('#final_report');
+    if (frEl) {
+        ClassicEditor.create(frEl, editorConfig)
+            .then(editor => {
+                finalReportEditor = editor;
+                editor.model.document.on('change:data', () => {
+                    frEl.value = editor.getData();
+                    updateWordCounts();
+                });
+                setTimeout(updateWordCounts, 300);
+            })
+            .catch(err => console.warn('CKEditor Final Report Init:', err));
+    }
+
+    const achEl = document.querySelector('#significant_achievements');
+    if (achEl) {
+        ClassicEditor.create(achEl, editorConfig)
+            .then(editor => {
+                achievementsEditor = editor;
+                editor.model.document.on('change:data', () => {
+                    achEl.value = editor.getData();
+                    updateWordCounts();
+                });
+                setTimeout(updateWordCounts, 300);
+            })
+            .catch(err => console.warn('CKEditor Significant Achievements Init:', err));
     }
 
     const outEl = document.querySelector('#output_outcome');
@@ -2327,7 +2448,9 @@ if (typeof ClassicEditor !== 'undefined') {
                 outputOutcomeEditor = editor;
                 editor.model.document.on('change:data', () => {
                     outEl.value = editor.getData();
+                    updateWordCounts();
                 });
+                setTimeout(updateWordCounts, 300);
             })
             .catch(err => console.warn('CKEditor Output / Outcome Init:', err));
     }
@@ -2337,8 +2460,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectElem = document.getElementById('selected_db_project_id');
     if (selectElem && selectElem.value && selectElem.value !== 'manual') {
         handleDbProjectSelection(selectElem.value);
-    } else {
+    } else if (selectElem && selectElem.value === 'manual') {
         handleDbProjectSelection('manual');
+    } else {
+        handleDbProjectSelection('');
     }
 
     // Check if we have prefilled Co-PIs from draft edit
@@ -2355,20 +2480,23 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-    updateWordCount();
+    updateWordCounts();
 
     const form = document.getElementById('completed-proposal-form') || document.querySelector('form[method="POST"]');
     if (form) {
         form.addEventListener('submit', function(e) {
             // Synchronize CKEditor 5 instances
-            if (achievementsEditor) {
-                document.querySelector('#significant_achievements').value = achievementsEditor.getData();
+            if (objectivesEditor) {
+                document.querySelector('#objectives').value = objectivesEditor.getData();
+            }
+            if (previousIrcAtrEditor) {
+                document.querySelector('#previous_irc_atr').value = previousIrcAtrEditor.getData();
             }
             if (finalReportEditor) {
                 document.querySelector('#final_report').value = finalReportEditor.getData();
             }
-            if (previousIrcAtrEditor) {
-                document.querySelector('#previous_irc_atr').value = previousIrcAtrEditor.getData();
+            if (achievementsEditor) {
+                document.querySelector('#significant_achievements').value = achievementsEditor.getData();
             }
             if (outputOutcomeEditor) {
                 document.querySelector('#output_outcome').value = outputOutcomeEditor.getData();
@@ -2405,8 +2533,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 return false;
             }
 
-            // Word count limit for Final Report on submit
-            const finalWords = updateWordCount();
+            // Word count limits check on submit
+            updateWordCounts();
+
+            const atrWords = countTextWords(document.querySelector('#previous_irc_atr').value);
+            if (atrWords > 40) {
+                e.preventDefault();
+                alert(`Action Taken Report (ATR) must be 40 words or less.\nMaximum allowed: 40 words.\nCurrent word count: ${atrWords} words.\n\nPlease shorten before submitting.`);
+                const atrEl = document.querySelector('#previous_irc_atr');
+                if (atrEl) atrEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            const finalWords = countTextWords(document.querySelector('#final_report').value);
             if (finalWords > 250) {
                 e.preventDefault();
                 alert(`Final Report must be strictly 250 words or less.\nMaximum allowed: 250 words.\nCurrent word count: ${finalWords} words.\n\nPlease shorten the summary before submitting.`);
@@ -2415,20 +2554,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 return false;
             }
 
-            // Validate mandatory rich text fields
-            const achRaw = (document.querySelector('#significant_achievements').value || '').replace(/<[^>]*>/g, '').trim();
-            if (!achRaw) {
+            const achWords = countTextWords(document.querySelector('#significant_achievements').value);
+            if (achWords > 70) {
                 e.preventDefault();
-                alert('Significant Achievements is mandatory.');
-                document.querySelector('#significant_achievements').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                alert(`Significant Achievements must be 70 words or less.\nMaximum allowed: 70 words.\nCurrent word count: ${achWords} words.\n\nPlease shorten before submitting.`);
+                const achEl = document.querySelector('#significant_achievements');
+                if (achEl) achEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return false;
             }
 
-            const frRaw = (document.querySelector('#final_report').value || '').replace(/<[^>]*>/g, '').trim();
-            if (!frRaw) {
+            const outWords = countTextWords(document.querySelector('#output_outcome').value);
+            if (outWords > 70) {
                 e.preventDefault();
-                alert('Final Report is mandatory.');
-                document.querySelector('#final_report').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                alert(`Output / Outcome must be 70 words or less.\nMaximum allowed: 70 words.\nCurrent word count: ${outWords} words.\n\nPlease shorten before submitting.`);
+                const outEl = document.querySelector('#output_outcome');
+                if (outEl) outEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            const othWords = countTextWords(document.querySelector('#other_details').value);
+            if (othWords > 50) {
+                e.preventDefault();
+                alert(`Other Details must be 50 words or less.\nMaximum allowed: 50 words.\nCurrent word count: ${othWords} words.\n\nPlease shorten before submitting.`);
+                const othEl = document.querySelector('#other_details');
+                if (othEl) othEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            // Validate mandatory fields
+            const objRaw = (document.querySelector('#objectives').value || '').replace(/<[^>]*>/g, '').trim();
+            if (!objRaw) {
+                e.preventDefault();
+                alert('Objectives is mandatory.');
+                document.querySelector('#objectives').scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return false;
             }
 
@@ -2440,11 +2598,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 return false;
             }
 
+            const frRaw = (document.querySelector('#final_report').value || '').replace(/<[^>]*>/g, '').trim();
+            if (!frRaw) {
+                e.preventDefault();
+                alert('Final Report is mandatory.');
+                document.querySelector('#final_report').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            const achRaw = (document.querySelector('#significant_achievements').value || '').replace(/<[^>]*>/g, '').trim();
+            if (!achRaw) {
+                e.preventDefault();
+                alert('Significant Achievements is mandatory.');
+                document.querySelector('#significant_achievements').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
             const outRaw = (document.querySelector('#output_outcome').value || '').replace(/<[^>]*>/g, '').trim();
             if (!outRaw) {
                 e.preventDefault();
                 alert('Output / Outcome is mandatory.');
                 document.querySelector('#output_outcome').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            const othRaw = (document.querySelector('#other_details').value || '').trim();
+            if (!othRaw) {
+                e.preventDefault();
+                alert('Other Details is mandatory (enter N/A if not applicable).');
+                document.querySelector('#other_details').scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return false;
             }
         });

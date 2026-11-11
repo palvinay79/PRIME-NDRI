@@ -804,14 +804,20 @@ function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, str
 
     // Category-Specific Sections (New Proposals)
     if ($cat === 'completed') {
-        $builder->addHeading("4. EXECUTIVE FINAL REPORT");
-        $builder->addRichText($proposal['final_report'] ?? '');
-        $builder->addHeading("5. SIGNIFICANT SCIENTIFIC ACHIEVEMENTS");
-        $builder->addRichText($proposal['significant_achievements'] ?? '');
-        $builder->addHeading("6. ACTION TAKEN REPORT (ATR) ON PREVIOUS IRC RECOMMENDATIONS");
+        $builder->addHeading("4. OBJECTIVES");
+        $builder->addRichText($proposal['objectives'] ?? '');
+        $builder->addHeading("5. ACTION TAKEN REPORT (ATR) ON PREVIOUS IRC RECOMMENDATIONS");
         $builder->addRichText($proposal['previous_irc_atr'] ?? '');
-        $builder->addHeading("7. DELIVERABLES, OUTPUT & OUTCOME");
+        $builder->addHeading("6. EXECUTIVE FINAL REPORT");
+        $builder->addRichText($proposal['final_report'] ?? '');
+        $builder->addHeading("7. SIGNIFICANT SCIENTIFIC ACHIEVEMENTS");
+        $builder->addRichText($proposal['significant_achievements'] ?? '');
+        $builder->addHeading("8. DELIVERABLES, OUTPUT & OUTCOME");
         $builder->addRichText($proposal['output_outcome'] ?? '');
+        if (!empty($proposal['other_details'])) {
+            $builder->addHeading("9. OTHER DETAILS & REMARKS");
+            $builder->addParagraph($proposal['other_details']);
+        }
     } elseif ($cat === 'ongoing') {
         $builder->addHeading("4. BIANNUAL PROGRESS REPORT");
         if (!empty($proposal['progress_report_period'])) {

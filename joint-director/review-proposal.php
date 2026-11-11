@@ -215,9 +215,43 @@ include __DIR__ . '/../includes/header.php';
     <div class="col-lg-8">
         <?php if (($proposal['proposal_category'] ?? '') === 'completed'): ?>
             <!-- Completed Proposal Dossier -->
+            <!-- 1. Objectives -->
+            <div class="detail-section-card">
+                <div class="detail-section-header">
+                    <i class="bi bi-bullseye text-primary"></i> 1. Project Objectives
+                </div>
+                <div class="detail-section-body">
+                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['objectives'], 'No objectives specified.') ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Action Taken Report (ATR) on Previous IRC Recommendations -->
             <div class="detail-section-card">
                 <div class="detail-section-header d-flex justify-content-between align-items-center">
-                    <div><i class="bi bi-file-earmark-text text-success"></i> Executive Final Report</div>
+                    <div><i class="bi bi-clipboard-check text-primary"></i> 2. Action Taken Report (ATR) on Previous IRC Recommendations</div>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                        Max 40 Words
+                    </span>
+                </div>
+                <div class="detail-section-body">
+                    <div class="p-3 bg-light rounded border mb-2 text-dark" style="line-height: 1.6;">
+                        <?= render_rich_text($proposal['previous_irc_atr'], 'N/A (No prior recommendations recorded).') ?>
+                    </div>
+                    <?php 
+                        $atrWords = !empty($proposal['previous_irc_atr']) ? count(preg_split('/\s+/', trim(strip_tags($proposal['previous_irc_atr'])))) : 0;
+                    ?>
+                    <div class="text-muted extra-small text-end">
+                        <i class="bi bi-fonts me-1"></i> Word Count: <?= $atrWords ?> / 40 words
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Executive Final Report -->
+            <div class="detail-section-card">
+                <div class="detail-section-header d-flex justify-content-between align-items-center">
+                    <div><i class="bi bi-file-earmark-text text-success"></i> 3. Executive Final Report</div>
                     <span class="badge bg-success-subtle text-success border border-success-subtle">
                         Max 250 Words
                     </span>
@@ -235,47 +269,66 @@ include __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- 4. Significant Achievements -->
             <div class="detail-section-card">
-                <div class="detail-section-header">
-                    <i class="bi bi-trophy text-warning"></i> Significant Achievements
+                <div class="detail-section-header d-flex justify-content-between align-items-center">
+                    <div><i class="bi bi-trophy text-warning"></i> 4. Significant Achievements</div>
+                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle">
+                        Max 70 Words
+                    </span>
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                    <div class="p-3 bg-light rounded border mb-2 text-dark" style="line-height: 1.6;">
                         <?= render_rich_text($proposal['significant_achievements'], 'None recorded.') ?>
                     </div>
-                </div>
-            </div>
-
-            <div class="detail-section-card">
-                <div class="detail-section-header">
-                    <i class="bi bi-clipboard-check text-primary"></i> Action Taken Report (ATR) on Previous IRC Recommendations
-                </div>
-                <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
-                        <?= render_rich_text($proposal['previous_irc_atr'], 'N/A (No prior recommendations recorded).') ?>
+                    <?php 
+                        $achWords = !empty($proposal['significant_achievements']) ? count(preg_split('/\s+/', trim(strip_tags($proposal['significant_achievements'])))) : 0;
+                    ?>
+                    <div class="text-muted extra-small text-end">
+                        <i class="bi bi-fonts me-1"></i> Word Count: <?= $achWords ?> / 70 words
                     </div>
                 </div>
             </div>
 
+            <!-- 5. Project Deliverables & Output / Outcome -->
             <div class="detail-section-card">
-                <div class="detail-section-header">
-                    <i class="bi bi-box-seam text-info"></i> Project Deliverables &amp; Output / Outcome
+                <div class="detail-section-header d-flex justify-content-between align-items-center">
+                    <div><i class="bi bi-box-seam text-info"></i> 5. Project Deliverables &amp; Output / Outcome</div>
+                    <span class="badge bg-info-subtle text-dark border border-info-subtle">
+                        Max 70 Words
+                    </span>
                 </div>
                 <div class="detail-section-body">
-                    <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                    <div class="p-3 bg-light rounded border mb-2 text-dark" style="line-height: 1.6;">
                         <?= render_rich_text($proposal['output_outcome'], 'None specified.') ?>
                     </div>
+                    <?php 
+                        $outWords = !empty($proposal['output_outcome']) ? count(preg_split('/\s+/', trim(strip_tags($proposal['output_outcome'])))) : 0;
+                    ?>
+                    <div class="text-muted extra-small text-end">
+                        <i class="bi bi-fonts me-1"></i> Word Count: <?= $outWords ?> / 70 words
+                    </div>
                 </div>
             </div>
 
+            <!-- 6. Other Details & Remarks -->
             <?php if (!empty($proposal['other_details'])): ?>
                 <div class="detail-section-card">
-                    <div class="detail-section-header">
-                        <i class="bi bi-info-circle text-secondary"></i> Other Details &amp; Remarks
+                    <div class="detail-section-header d-flex justify-content-between align-items-center">
+                        <div><i class="bi bi-info-circle text-secondary"></i> 6. Other Details &amp; Remarks</div>
+                        <span class="badge bg-secondary-subtle text-secondary border">
+                            Max 50 Words
+                        </span>
                     </div>
                     <div class="detail-section-body">
-                        <div class="p-3 bg-light rounded border text-dark" style="line-height: 1.6;">
+                        <div class="p-3 bg-light rounded border mb-2 text-dark" style="line-height: 1.6;">
                             <?= render_rich_text($proposal['other_details']) ?>
+                        </div>
+                        <?php 
+                            $othWords = !empty($proposal['other_details']) ? count(preg_split('/\s+/', trim(strip_tags($proposal['other_details'])))) : 0;
+                        ?>
+                        <div class="text-muted extra-small text-end">
+                            <i class="bi bi-fonts me-1"></i> Word Count: <?= $othWords ?> / 50 words
                         </div>
                     </div>
                 </div>
