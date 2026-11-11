@@ -104,8 +104,14 @@ if ($editProposalId > 0) {
 }
 
 $linkedProjectId = (int)($editProposal['linked_project_id'] ?? ($_GET['project_id'] ?? ($_POST['linked_project_id'] ?? 0)));
-if ($linkedProjectId <= 0 && !empty($activeProjects) && empty($_POST) && !$editProposal) {
-    $linkedProjectId = (int)$activeProjects[0]['id'];
+if ($linkedProjectId <= 0 && !empty($activeProjects) && empty($_POST) && !$editProposal && !isset($_GET['manual'])) {
+    // Only auto-select by default if the current user is the lead Principal Investigator (or HOD)
+    foreach ($activeProjects as $p) {
+        if ((int)$p['scientist_id'] === $userId || $isHod) {
+            $linkedProjectId = (int)$p['id'];
+            break;
+        }
+    }
 }
 $selectedProject = null;
 $projectType = $editProposal['project_type'] ?? 'in_house';
@@ -626,7 +632,7 @@ include __DIR__ . '/../includes/header.php';
                             Select an active project from the system database to automatically retrieve its title, project code, funding type, TRL, Co-PIs, approved budget, and tenure. If submitting a legacy or past project not in the system, select "Project Not In System".
                         </p>
                         <select name="selected_db_project_id" id="selected_db_project_id" class="form-select border-secondary-subtle" style="font-size: 0.92rem; font-weight: 500;" onchange="handleDbProjectSelection(this.value)">
-                            <option value="">-- Choose an active project to autofill details (or select manual entry below) --</option>
+                            <option value="" <?= ($linkedProjectId <= 0 && empty($selectedProject) && empty($_POST) && !$editProposal && !isset($_GET['manual'])) ? 'selected' : '' ?>>-- Choose an active project to autofill details (or select manual entry below) --</option>
                             <?php if (!empty($activeProjects)): ?>
                                 <optgroup label="Your Active Projects in Database">
                                     <?php foreach ($activeProjects as $p): ?>
@@ -636,11 +642,11 @@ include __DIR__ . '/../includes/header.php';
                                     <?php endforeach; ?>
                                 </optgroup>
                             <?php endif; ?>
-                            <option value="manual" <?= ($linkedProjectId === 0 && !empty($_POST)) ? 'selected' : '' ?>>
+                            <option value="manual" <?= ($linkedProjectId === 0 && ($editProposal || !empty($_POST) || isset($_GET['manual']) || empty($activeProjects))) ? 'selected' : '' ?>>
                                 ➕ Project Not In System / Legacy Project (Enter All Fields Manually)
                             </option>
                         </select>
-                        <input type="hidden" name="linked_project_id" id="linked_project_id" value="<?= e($linkedProjectId) ?>">
+                        <input type="hidden" name="linked_project_id" id="linked_project_id" value="<?= e($linkedProjectId > 0 ? $linkedProjectId : '') ?>">
                     </div>
                 </div>
 
@@ -728,6 +734,20 @@ include __DIR__ . '/../includes/header.php';
                                 <div class="mt-3 p-2 bg-light rounded border text-muted small">
                                     <i class="bi bi-info-circle-fill text-primary me-1"></i>
                                     Project Associates (Co-PIs) are loaded below in <strong>Section 2</strong>. You can search, add, edit, or remove collaborators there.
+                                </div>
+
+                                <!-- Co-PI View-Only Notice Banner -->
+                                <div id="copi-warning-banner" class="alert alert-warning border-warning-subtle small mt-3 mb-0" style="<?= ($selectedProject && (int)$selectedProject['scientist_id'] !== $userId && !$isHod) ? '' : 'display: none !important;' ?>">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <i class="bi bi-exclamation-triangle-fill text-warning fs-5 flex-shrink-0"></i>
+                                        <div>
+                                            <strong>Co-PI View-Only Mode:</strong>
+                                            You are associated with this active project as a Co-Principal Investigator. Under NDRI guidelines, completion reports can only be submitted by the lead Principal Investigator (<span id="copi-lead-pi-name"><?= e($selectedProject['scientist_name'] ?? 'Dr. Scientist') ?></span>).
+                                            <div class="mt-1 text-muted">
+                                                To submit a completion project for a past, completed, or legacy project not in the system, switch the dropdown above to <strong>"➕ Project Not In System / Legacy Project (Enter All Fields Manually)"</strong>.
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1251,22 +1271,26 @@ include __DIR__ . '/../includes/header.php';
     <div class="card shadow-sm border-0 mb-5">
         <div class="card-body d-flex justify-content-between align-items-center">
             <a href="<?= $isHod ? url("/hod/dashboard.php") : url("/scientist/proposals.php") ?>" class="btn btn-outline-secondary">Cancel</a>
-            <div class="d-flex gap-2">
-                <?php if ($selectedProject && (int)$selectedProject['scientist_id'] !== $userId && !$isHod): ?>
-                    <span class="badge bg-secondary-subtle text-secondary border px-3 py-2 font-monospace">
-                        <i class="bi bi-lock me-1"></i> Co-PI View-Only Mode
-                    </span>
-                    <a href="<?= url("/scientist/view-progress.php?project_id=" . $selectedProject['id']) ?>" class="btn btn-primary px-3" style="background-color: #1a365d; border-color: #1a365d;">
-                        <i class="bi bi-eye me-1"></i> View Reports & Observations
-                    </a>
-                <?php else: ?>
+            <div class="d-flex align-items-center gap-2">
+                <!-- Standard Submission Action Buttons -->
+                <div id="standard-actions-container" class="d-flex gap-2" style="<?= ($selectedProject && (int)$selectedProject['scientist_id'] !== $userId && !$isHod) ? 'display: none !important;' : '' ?>">
                     <button type="submit" name="submit_action" value="draft" class="btn btn-outline-primary" formnovalidate onclick="const el = document.getElementById('submit_action_hidden'); if(el) el.value = 'draft'; window.isDraftAction = true;">
                         <i class="bi bi-save me-1"></i> Save as Draft
                     </button>
                     <button type="submit" name="submit_action" value="submit" class="btn btn-primary fw-semibold px-4" style="background-color: #1a365d; border-color: #1a365d;" id="submit_hod_btn" onclick="const el = document.getElementById('submit_action_hidden'); if(el) el.value = 'submit'; window.isDraftAction = false;">
                         <i class="bi bi-send-check me-1"></i> <?= $isHod ? 'Submit to Joint Director' : 'Submit to HOD' ?>
                     </button>
-                <?php endif; ?>
+                </div>
+
+                <!-- Co-PI View-Only Container -->
+                <div id="copi-actions-container" class="d-flex align-items-center gap-2" style="<?= ($selectedProject && (int)$selectedProject['scientist_id'] !== $userId && !$isHod) ? '' : 'display: none !important;' ?>">
+                    <span class="badge bg-secondary-subtle text-secondary border px-3 py-2 font-monospace">
+                        <i class="bi bi-lock me-1"></i> Co-PI View-Only Mode
+                    </span>
+                    <a id="copi-view-progress-btn" href="<?= url("/scientist/view-progress.php?project_id=" . ($selectedProject['id'] ?? 0)) ?>" class="btn btn-primary px-3" style="background-color: #1a365d; border-color: #1a365d;">
+                        <i class="bi bi-eye me-1"></i> View Reports & Observations
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -1292,10 +1316,14 @@ const PORTAL_SCIENTISTS = <?= json_encode(array_map(function($s) {
 // Existing Co-PIs for draft editing or pre-fills
 const EXISTING_COPIS = <?= json_encode($existingCopis) ?>;
 
+const CURRENT_USER_ID = <?= (int)$userId ?>;
+const IS_HOD = <?= $isHod ? 'true' : 'false' ?>;
+
 // Active projects in database for autofill
 const ACTIVE_PROJECTS = <?= json_encode(array_map(function($p) {
     return [
         'id' => (int)$p['id'],
+        'scientist_id' => (int)($p['scientist_id'] ?? 0),
         'project_number' => $p['project_number'],
         'project_type' => $p['project_type'],
         'funding_agency' => $p['funding_agency'] ?: '',
@@ -1327,6 +1355,10 @@ function handleDbProjectSelection(selectedVal) {
     const manualFields = document.getElementById('manual-project-fields-section');
     const dbTimeline = document.getElementById('db-timeline-budget-summary');
     const manualTimeline = document.getElementById('manual-timeline-budget-inputs');
+    const stdActions = document.getElementById('standard-actions-container');
+    const copiActions = document.getElementById('copi-actions-container');
+    const copiBtn = document.getElementById('copi-view-progress-btn');
+    const copiWarning = document.getElementById('copi-warning-banner');
 
     const titleInput = document.getElementById('title');
     const deptSelect = document.getElementById('department_id');
@@ -1350,6 +1382,10 @@ function handleDbProjectSelection(selectedVal) {
         if (dbTimeline) dbTimeline.style.display = 'none';
         if (manualTimeline) manualTimeline.style.display = 'block';
 
+        if (stdActions) stdActions.style.setProperty('display', 'flex', 'important');
+        if (copiActions) copiActions.style.setProperty('display', 'none', 'important');
+        if (copiWarning) copiWarning.style.setProperty('display', 'none', 'important');
+
         // Re-enable validation for manual entry
         if (titleInput) titleInput.required = true;
         if (deptSelect) deptSelect.required = true;
@@ -1371,6 +1407,23 @@ function handleDbProjectSelection(selectedVal) {
     if (!proj) return;
 
     hiddenId.value = proj.id;
+
+    // Toggle actions based on lead PI vs Co-PI
+    const isCoPiOnly = !IS_HOD && proj.scientist_id && (parseInt(proj.scientist_id, 10) !== parseInt(CURRENT_USER_ID, 10));
+    if (isCoPiOnly) {
+        if (stdActions) stdActions.style.setProperty('display', 'none', 'important');
+        if (copiActions) copiActions.style.setProperty('display', 'flex', 'important');
+        if (copiBtn) copiBtn.href = "<?= url('/scientist/view-progress.php?project_id=') ?>" + proj.id;
+        if (copiWarning) {
+            copiWarning.style.setProperty('display', 'block', 'important');
+            const piNameEl = document.getElementById('copi-lead-pi-name');
+            if (piNameEl) piNameEl.textContent = proj.scientist_name || 'Dr. Scientist';
+        }
+    } else {
+        if (stdActions) stdActions.style.setProperty('display', 'flex', 'important');
+        if (copiActions) copiActions.style.setProperty('display', 'none', 'important');
+        if (copiWarning) copiWarning.style.setProperty('display', 'none', 'important');
+    }
 
     // Show Database Record card and hide manual entry blocks (Co-PI section remains visible)
     if (dbCard) dbCard.style.display = 'block';
@@ -2281,6 +2334,13 @@ if (typeof ClassicEditor !== 'undefined') {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    const selectElem = document.getElementById('selected_db_project_id');
+    if (selectElem && selectElem.value && selectElem.value !== 'manual') {
+        handleDbProjectSelection(selectElem.value);
+    } else {
+        handleDbProjectSelection('manual');
+    }
+
     // Check if we have prefilled Co-PIs from draft edit
     if (typeof EXISTING_COPIS !== 'undefined' && EXISTING_COPIS && EXISTING_COPIS.length > 0) {
         const container = document.getElementById('copi-container');
@@ -2294,16 +2354,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 email: cp.email || ''
             });
         });
-    } else {
-        const selectElem = document.getElementById('selected_db_project_id');
-        if (selectElem && selectElem.value && selectElem.value !== 'manual') {
-            handleDbProjectSelection(selectElem.value);
-        } else {
-            toggleFundingAgencyInput();
-            handleNationalPriorityChange();
-            calculateProjectDuration();
-            calculateBudgetUtilization();
-        }
     }
     updateWordCount();
 
