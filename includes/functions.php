@@ -311,35 +311,60 @@ function render_flashes(): string {
 }
 
 /**
- * Format Currency (INR / ₹)
+ * Format a number in Indian numbering format (Lakhs and Crores grouping: e.g. 18030880.00 -> 1,80,30,880.00)
  */
-function format_currency(?float $amount): string {
-    if ($amount === null) return '₹ 0.00';
-    return '₹ ' . number_format($amount, 2, '.', ',');
+function format_indian_number($amount, int $decimals = 2): string {
+    if ($amount === null || $amount === '') return '0.00';
+    $isNegative = ((float)$amount < 0);
+    $num = abs((float)$amount);
+    $formatted = number_format($num, $decimals, '.', '');
+    $parts = explode('.', $formatted);
+    $intPart = $parts[0];
+    $decPart = isset($parts[1]) ? ('.' . $parts[1]) : '';
+
+    if (strlen($intPart) <= 3) {
+        $result = $intPart;
+    } else {
+        $lastThree = substr($intPart, -3);
+        $remaining = substr($intPart, 0, -3);
+        $remaining = preg_replace('/\B(?=(\d{2})+(?!\d))/', ',', $remaining);
+        $result = $remaining . ',' . $lastThree;
+    }
+    return ($isNegative ? '-' : '') . $result . $decPart;
 }
 
 /**
- * Format Date (Strictly dd -mm -yy format, e.g. 24 -10 -26)
+ * Format Currency (INR / ₹) in Indian numbering format (e.g. ₹ 1,80,30,880.00)
+ */
+function format_currency(?float $amount, string $prefix = '₹ '): string {
+    if ($amount === null) return $prefix . '0.00';
+    $isNegative = ($amount < 0);
+    $absFormatted = format_indian_number(abs($amount), 2);
+    return ($isNegative ? '-' : '') . $prefix . $absFormatted;
+}
+
+/**
+ * Format Date (Strictly dd-mm-yy format, e.g. 24-10-26)
  */
 function format_date(?string $dateStr, ?string $format = null): string {
     if (empty($dateStr)) return '-';
     $timestamp = strtotime($dateStr);
     if (!$timestamp) return '-';
-    // If a custom non-standard format was passed that is not a legacy full date, allow it, else use dd -mm -yy
+    // If a custom non-standard format was passed that is not a legacy full date, allow it, else use dd-mm-yy
     if ($format !== null && !in_array($format, ['d M Y', 'd-m-Y', 'Y-m-d', 'd M Y, h:i A'])) {
         return date($format, $timestamp);
     }
-    return date('d -m -y', $timestamp);
+    return date('d-m-y', $timestamp);
 }
 
 /**
- * Format DateTime (Strictly dd -mm -yy with time, e.g. 24 -10 -26, 02:30 PM)
+ * Format DateTime (Strictly dd-mm-yy with time, e.g. 24-10-26, 02:30 PM)
  */
 function format_datetime(?string $dateStr): string {
     if (empty($dateStr)) return '-';
     $timestamp = strtotime($dateStr);
     if (!$timestamp) return '-';
-    return date('d -m -y, h:i A', $timestamp);
+    return date('d-m-y, h:i A', $timestamp);
 }
 
 /**

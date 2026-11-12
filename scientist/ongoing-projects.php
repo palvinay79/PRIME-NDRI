@@ -788,7 +788,7 @@ include __DIR__ . '/../includes/header.php';
                     <label class="form-label small fw-semibold text-secondary">Total Sanctioned Budget Allocated (₹)</label>
                     <div class="input-group">
                         <span class="input-group-text bg-white"><i class="bi bi-currency-rupee text-success"></i></span>
-                        <input type="text" class="form-control fw-bold bg-white text-dark font-monospace" id="display_budget_allocated" value="<?= number_format((float)$selectedProject['approved_budget'], 2) ?>" readonly>
+                        <input type="text" class="form-control fw-bold bg-white text-dark font-monospace" id="display_budget_allocated" value="<?= format_indian_number((float)$selectedProject['approved_budget'], 2) ?>" readonly>
                     </div>
                 </div>
 

@@ -110,11 +110,30 @@ usort($filteredSlated, function($a, $b) use ($sortOption) {
         if ($progA !== $progB) {
             return strcmp($progA, $progB);
         }
+        // Hierarchy within program:
+        // Rank 0: In-House Completed (isExt=0, isComp=1)
+        // Rank 1: In-House New (isExt=0, isComp=0)
+        // Rank 2: External Completed (isExt=1, isComp=1)
+        // Rank 3: External New (isExt=1, isComp=0)
         $isExtA = (($a['project_type'] ?? '') === 'funding_agency') ? 1 : 0;
         $isExtB = (($b['project_type'] ?? '') === 'funding_agency') ? 1 : 0;
-        if ($isExtA !== $isExtB) {
-            return $isExtA - $isExtB;
+        $isCompA = (($a['proposal_category'] ?? '') === 'completed') ? 1 : 0;
+        $isCompB = (($b['proposal_category'] ?? '') === 'completed') ? 1 : 0;
+        $rankA = ($isExtA * 2) + ($isCompA ? 0 : 1);
+        $rankB = ($isExtB * 2) + ($isCompB ? 0 : 1);
+        if ($rankA !== $rankB) {
+            return $rankA - $rankB;
         }
+        return (int)$a['id'] - (int)$b['id'];
+    } elseif ($sortOption === 'completed_first' || $sortOption === 'completed_projects' || $sortOption === 'completed') {
+        $isCompA = (($a['proposal_category'] ?? '') === 'completed') ? 1 : 0;
+        $isCompB = (($b['proposal_category'] ?? '') === 'completed') ? 1 : 0;
+        if ($isCompA !== $isCompB) {
+            return $isCompB - $isCompA; // Completed projects (1) first
+        }
+        $progA = resolve_program_letter($a['institute_priority_area'] ?? '');
+        $progB = resolve_program_letter($b['institute_priority_area'] ?? '');
+        if ($progA !== $progB) return strcmp($progA, $progB);
         return (int)$a['id'] - (int)$b['id'];
     } elseif ($sortOption === 'program_asc') {
         $progA = resolve_program_letter($a['institute_priority_area'] ?? '');
@@ -349,7 +368,8 @@ include __DIR__ . '/../includes/header.php';
                     <i class="bi bi-sort-down text-dark me-1"></i> Sort Order
                 </label>
                 <select name="sort" class="form-select form-select-sm fw-semibold text-primary" onchange="this.form.submit()">
-                    <option value="program_in_house" <?= ($sortOption === 'program_in_house') ? 'selected' : '' ?>>Program (A-F) &amp; In-House 1st</option>
+                    <option value="program_in_house" <?= ($sortOption === 'program_in_house') ? 'selected' : '' ?>>Program (A-F) &amp; Completed / In-House 1st</option>
+                    <option value="completed_first" <?= ($sortOption === 'completed_first' || $sortOption === 'completed_projects' || $sortOption === 'completed') ? 'selected' : '' ?>>Completed Projects</option>
                     <option value="program_asc" <?= ($sortOption === 'program_asc') ? 'selected' : '' ?>>Program (A to F)</option>
                     <option value="funding_type" <?= ($sortOption === 'funding_type') ? 'selected' : '' ?>>Funding Type (In-House 1st)</option>
                     <option value="division_asc" <?= ($sortOption === 'division_asc') ? 'selected' : '' ?>>Division (A to Z)</option>
@@ -396,8 +416,24 @@ include __DIR__ . '/../includes/header.php';
                 <?php if (!empty($searchQuery)): ?>
                     <span class="badge bg-secondary text-white">"<?= e($searchQuery) ?>" <a href="<?= build_filter_url(['q' => '']) ?>" class="text-white text-decoration-none ms-1">&times;</a></span>
                 <?php endif; ?>
-                <?php if ($sortOption !== 'program_in_house'): ?>
-                    <span class="badge bg-light text-dark border">Sort: <?= e($sortOption) ?> <a href="<?= build_filter_url(['sort' => 'program_in_house']) ?>" class="text-dark text-decoration-none ms-1">&times;</a></span>
+                <?php if ($sortOption !== 'program_in_house'): 
+                    $sortLabels = [
+                        'completed_first' => 'Completed Projects',
+                        'completed_projects' => 'Completed Projects',
+                        'completed' => 'Completed Projects',
+                        'program_asc' => 'Program A-F',
+                        'funding_type' => 'Funding Type',
+                        'division_asc' => 'Division A-Z',
+                        'division_desc' => 'Division Z-A',
+                        'date_desc' => 'Newest First',
+                        'date_asc' => 'Oldest First',
+                        'budget_desc' => 'Budget High-Low',
+                        'budget_asc' => 'Budget Low-High',
+                        'title_asc' => 'Title A-Z'
+                    ];
+                    $displaySort = $sortLabels[$sortOption] ?? $sortOption;
+                ?>
+                    <span class="badge bg-light text-dark border">Sort: <?= e($displaySort) ?> <a href="<?= build_filter_url(['sort' => 'program_in_house']) ?>" class="text-dark text-decoration-none ms-1">&times;</a></span>
                 <?php endif; ?>
                 <a href="<?= url('/joint-director/irc-meetings.php?category=' . urlencode($categoryFilter)) ?>" class="btn btn-link btn-xs text-danger text-decoration-none ms-auto py-0">Reset all filters</a>
             </div>
@@ -610,7 +646,7 @@ include __DIR__ . '/../includes/header.php';
                             </td>
                             <td>
                                 <?php if ($d['approved_budget']): ?>
-                                    <span class="fw-semibold text-success">₹<?= number_format((float)$d['approved_budget'], 2) ?></span>
+                                    <span class="fw-semibold text-success"><?= format_currency((float)$d['approved_budget']) ?></span>
                                 <?php else: ?>
                                     <span class="text-muted small">-</span>
                                 <?php endif; ?>

@@ -254,7 +254,7 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                     <div id="budgetWarningBox" class="alert alert-warning py-2 px-3 small mt-2 mb-0 <?= $currentExpenditure > $approvedBudget ? '' : 'd-none' ?>">
                         <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                        <strong>Notice:</strong> The entered period expenditure (<span id="warnEnteredAmt">₹<?= number_format($currentExpenditure, 2) ?></span>) exceeds the total project approved grant (₹<?= number_format($approvedBudget, 2) ?>). Please ensure you have not accidentally added extra digits.
+                        <strong>Notice:</strong> The entered period expenditure (<span id="warnEnteredAmt"><?= format_currency($currentExpenditure) ?></span>) exceeds the total project approved grant (<?= format_currency($approvedBudget) ?>). Please ensure you have not accidentally added extra digits.
                     </div>
                 </div>
             </div>

@@ -558,8 +558,8 @@ include __DIR__ . '/../includes/header.php';
                         </li>
                     <?php endif; ?>
                     <li class="list-group-item px-0 py-2">
-                        <span class="text-muted d-block">Proposed Timeline:</span>
-                        <strong><?= format_date($proposal['proposed_start_date']) ?></strong> to <strong><?= format_date($proposal['proposed_end_date']) ?></strong>
+                        <span class="text-muted d-block">Project Timeline (DD-MM-YY):</span>
+                        <span class="font-monospace fw-bold text-dark"><?= format_date($proposal['proposed_start_date']) ?></span> to <span class="font-monospace fw-bold text-dark"><?= format_date($proposal['proposed_end_date']) ?></span>
                     </li>
                     <li class="list-group-item px-0 py-2">
                         <span class="text-muted d-block">Project Duration:</span>

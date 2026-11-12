@@ -620,12 +620,12 @@ include __DIR__ . '/../includes/header.php';
 
                 <div class="row g-2 small">
                     <div class="col-6">
-                        <span class="text-muted d-block">Start Date:</span>
-                        <strong><?= format_date($proposal['proposed_start_date']) ?></strong>
+                        <span class="text-muted d-block">Start Date (DD-MM-YY):</span>
+                        <strong class="font-monospace text-dark"><?= format_date($proposal['proposed_start_date']) ?></strong>
                     </div>
                     <div class="col-6">
-                        <span class="text-muted d-block">End Date:</span>
-                        <strong><?= format_date($proposal['proposed_end_date']) ?></strong>
+                        <span class="text-muted d-block">End Date (DD-MM-YY):</span>
+                        <strong class="font-monospace text-dark"><?= format_date($proposal['proposed_end_date']) ?></strong>
                     </div>
                     <div class="col-12 mt-1">
                         <span class="text-muted d-block">Project Duration:</span>

@@ -36,8 +36,8 @@ $db = get_db();
 $userId = current_user_id();
 $userRole = current_user_role_id();
 
-// Filter parameters: defaults to 'new' proposals as specified by user
-$typeFilter = sanitize($_GET['category'] ?? ($_GET['type'] ?? 'new')); // 'new', 'all', 'ongoing', 'completed'
+// Filter parameters: defaults to 'all' proposals (completed and new) as specified by council governance
+$typeFilter = sanitize($_GET['category'] ?? ($_GET['type'] ?? 'all')); // 'all', 'new', 'ongoing', 'completed'
 $format = sanitize($_GET['format'] ?? 'docx'); // 'docx' or 'html'
 $programFilter = strtoupper(trim(sanitize($_GET['program'] ?? '')));
 $fundingTypeFilter = sanitize($_GET['funding_type'] ?? '');
@@ -59,6 +59,7 @@ if ($typeFilter === 'new') {
 } elseif ($typeFilter === 'completed') {
     $sql .= " AND p.proposal_category = 'completed'";
 }
+// When $typeFilter === 'all', both completed and new proposals slated for IRC are queried
 
 if (!empty($programFilter) && in_array($programFilter, ['A', 'B', 'C', 'D', 'E', 'F'])) {
     $sql .= " AND (UPPER(TRIM(p.institute_priority_area)) = ? OR UPPER(TRIM(p.institute_priority_area)) LIKE ?)";
@@ -86,19 +87,24 @@ $proposals = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $programsMeta = get_institute_priority_programs();
 $programKeys = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-// Structure: $organized[PROGRAM_LETTER]['in_house' => [...], 'external' => [...]]
+// Structure: $organized[PROGRAM_LETTER] with 4 distinct sub-groups:
+// Program X -> In house completed -> In house new -> External completed -> External new
 $organized = [];
 foreach ($programKeys as $k) {
     $organized[$k] = [
         'name' => $programsMeta[$k] ?? "Program {$k}",
-        'in_house' => [],
-        'external' => []
+        'in_house_completed' => [],
+        'in_house_new' => [],
+        'external_completed' => [],
+        'external_new' => []
     ];
 }
 $unassigned = [
     'name' => 'Other / Unassigned Priority Programs',
-    'in_house' => [],
-    'external' => []
+    'in_house_completed' => [],
+    'in_house_new' => [],
+    'external_completed' => [],
+    'external_new' => []
 ];
 
 // Helper to resolve program key from institute_priority_area
@@ -126,10 +132,15 @@ $totalProposalsCount = count($proposals);
 $totalBudgetCount = 0.0;
 $totalInHouseCount = 0;
 $totalExternalCount = 0;
+$totalInHouseCompletedCount = 0;
+$totalInHouseNewCount = 0;
+$totalExternalCompletedCount = 0;
+$totalExternalNewCount = 0;
 
 foreach ($proposals as &$p) {
     $progKey = resolve_program_letter($p['institute_priority_area'] ?? '');
     $isExternal = (($p['project_type'] ?? '') === 'funding_agency');
+    $isCompleted = (($p['proposal_category'] ?? '') === 'completed');
     
     // Attach Co-PIs
     $p['copis'] = get_proposal_copis((int)$p['id'], (int)($p['linked_project_id'] ?? 0), (string)($p['project_number'] ?? ''));
@@ -147,22 +158,42 @@ foreach ($proposals as &$p) {
         return !empty(trim($doc['file_name'] ?? '')) && !empty(trim($doc['file_path'] ?? ''));
     }));
 
-    $budgetVal = (float)($p['proposed_budget'] ?? 0);
+    $budgetVal = (float)($p['budget_allocated'] ?: ($p['proposed_budget'] ?? 0));
     $totalBudgetCount += $budgetVal;
 
     if ($isExternal) {
         $totalExternalCount++;
-        if (isset($organized[$progKey])) {
-            $organized[$progKey]['external'][] = $p;
+        if ($isCompleted) {
+            $totalExternalCompletedCount++;
+            if (isset($organized[$progKey])) {
+                $organized[$progKey]['external_completed'][] = $p;
+            } else {
+                $unassigned['external_completed'][] = $p;
+            }
         } else {
-            $unassigned['external'][] = $p;
+            $totalExternalNewCount++;
+            if (isset($organized[$progKey])) {
+                $organized[$progKey]['external_new'][] = $p;
+            } else {
+                $unassigned['external_new'][] = $p;
+            }
         }
     } else {
         $totalInHouseCount++;
-        if (isset($organized[$progKey])) {
-            $organized[$progKey]['in_house'][] = $p;
+        if ($isCompleted) {
+            $totalInHouseCompletedCount++;
+            if (isset($organized[$progKey])) {
+                $organized[$progKey]['in_house_completed'][] = $p;
+            } else {
+                $unassigned['in_house_completed'][] = $p;
+            }
         } else {
-            $unassigned['in_house'][] = $p;
+            $totalInHouseNewCount++;
+            if (isset($organized[$progKey])) {
+                $organized[$progKey]['in_house_new'][] = $p;
+            } else {
+                $unassigned['in_house_new'][] = $p;
+            }
         }
     }
 }
@@ -227,8 +258,12 @@ if ($format === 'html') {
         $hasAnyProgramWithProposals = false;
         foreach ($programKeys as $pKey): 
             $pData = $organized[$pKey];
-            $inHouseCount = count($pData['in_house']);
-            $extCount = count($pData['external']);
+            $ihComp = $pData['in_house_completed'];
+            $ihNew = $pData['in_house_new'];
+            $exComp = $pData['external_completed'];
+            $exNew = $pData['external_new'];
+            $inHouseCount = count($ihComp) + count($ihNew);
+            $extCount = count($exComp) + count($exNew);
 
             // Don't add if proposals are not there in program!
             if ($inHouseCount === 0 && $extCount === 0) {
@@ -243,12 +278,39 @@ if ($format === 'html') {
                 </span>
             </div>
 
-            <!-- In-House (only if present) -->
-            <?php if ($inHouseCount > 0): ?>
-                <div class="subprog-title">PROGRAM <?= $pKey ?> — IN-HOUSE NEW PROPOSALS (<?= $inHouseCount ?>)</div>
-                <?php foreach ($pData['in_house'] as $p): ?>
+            <!-- In-House Completed (if present) -->
+            <?php if (!empty($ihComp)): ?>
+                <div class="subprog-title">PROGRAM <?= $pKey ?> — IN-HOUSE COMPLETED PROJECTS (<?= count($ihComp) ?>)</div>
+                <?php foreach ($ihComp as $p): ?>
                     <div class="proposal-block">
-                        <div style="font-size: 13pt; font-weight: bold; color: #1a365d; text-align: left; margin-bottom: 6px; border-bottom: 2px solid #1a365d; padding-bottom: 2px;">PROGRAM <?= $pKey ?></div>
+                        <div style="font-size: 13pt; font-weight: bold; color: #1a365d; text-align: left; margin-bottom: 6px; border-bottom: 2px solid #1a365d; padding-bottom: 2px;">PROGRAM <?= $pKey ?> (IN-HOUSE COMPLETED)</div>
+                        <h3><?= e($p['project_number'] ?: $p['proposal_number']) ?> — <?= e($p['title']) ?></h3>
+                        <table>
+                            <tr>
+                                <th style="width: 25%;">Project / Proposal:</th><td><?= e($p['project_number'] ?: $p['proposal_number']) ?></td>
+                                <th style="width: 25%;">Current Status:</th><td><span style="color: #059669; font-weight: bold;"><?= e($p['current_status']) ?></span></td>
+                            </tr>
+                            <tr>
+                                <th>Principal Investigator:</th><td><?= e($p['scientist_name']) ?> (<?= e($p['scientist_email']) ?>)</td>
+                                <th>Department / Division:</th><td><?= e($p['department_name']) ?></td>
+                            </tr>
+                            <tr>
+                                <th>Category / Type:</th><td><strong>Completed In-House Project</strong></td>
+                                <th>Priority Program:</th><td>Program <?= $pKey ?> — <?= e($pData['name']) ?></td>
+                            </tr>
+                        </table>
+                        <h4>PROJECT TITLE</h4>
+                        <p style="font-weight: bold; color: #1a365d;"><?= e($p['title']) ?></p>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+
+            <!-- In-House New Proposals (if present) -->
+            <?php if (!empty($ihNew)): ?>
+                <div class="subprog-title">PROGRAM <?= $pKey ?> — IN-HOUSE NEW PROPOSALS (<?= count($ihNew) ?>)</div>
+                <?php foreach ($ihNew as $p): ?>
+                    <div class="proposal-block">
+                        <div style="font-size: 13pt; font-weight: bold; color: #1a365d; text-align: left; margin-bottom: 6px; border-bottom: 2px solid #1a365d; padding-bottom: 2px;">PROGRAM <?= $pKey ?> (IN-HOUSE NEW)</div>
                         <h3><?= e($p['proposal_number']) ?> — <?= e($p['title']) ?></h3>
                         <table>
                             <tr>
@@ -314,10 +376,37 @@ if ($format === 'html') {
                 <?php endforeach; ?>
             <?php endif; ?>
 
-            <!-- Externally Funded (only if present) -->
-            <?php if ($extCount > 0): ?>
-                <div class="subprog-title">PROGRAM <?= $pKey ?> — EXTERNALLY FUNDED NEW PROPOSALS (<?= $extCount ?>)</div>
-                <?php foreach ($pData['external'] as $p): ?>
+            <!-- Externally Funded Completed (if present) -->
+            <?php if (!empty($exComp)): ?>
+                <div class="subprog-title">PROGRAM <?= $pKey ?> — EXTERNALLY FUNDED COMPLETED PROJECTS (<?= count($exComp) ?>)</div>
+                <?php foreach ($exComp as $p): ?>
+                    <div class="proposal-block">
+                        <div style="font-size: 13pt; font-weight: bold; color: #1a365d; text-align: left; margin-bottom: 6px; border-bottom: 2px solid #1a365d; padding-bottom: 2px;">PROGRAM <?= $pKey ?> (EXTERNALLY FUNDED COMPLETED)</div>
+                        <h3><?= e($p['project_number'] ?: $p['proposal_number']) ?> — <?= e($p['title']) ?></h3>
+                        <table>
+                            <tr>
+                                <th style="width: 25%;">Project / Proposal:</th><td><?= e($p['project_number'] ?: $p['proposal_number']) ?></td>
+                                <th style="width: 25%;">Current Status:</th><td><span style="color: #059669; font-weight: bold;"><?= e($p['current_status']) ?></span></td>
+                            </tr>
+                            <tr>
+                                <th>Principal Investigator:</th><td><?= e($p['scientist_name']) ?> (<?= e($p['scientist_email']) ?>)</td>
+                                <th>Department / Division:</th><td><?= e($p['department_name']) ?></td>
+                            </tr>
+                            <tr>
+                                <th>Category / Type:</th><td><strong>Completed Externally Funded Project</strong></td>
+                                <th>Priority Program:</th><td>Program <?= $pKey ?> — <?= e($pData['name']) ?></td>
+                            </tr>
+                        </table>
+                        <h4>PROJECT TITLE</h4>
+                        <p style="font-weight: bold; color: #1a365d;"><?= e($p['title']) ?></p>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+
+            <!-- Externally Funded New Proposals (if present) -->
+            <?php if (!empty($exNew)): ?>
+                <div class="subprog-title">PROGRAM <?= $pKey ?> — EXTERNALLY FUNDED NEW PROPOSALS (<?= count($exNew) ?>)</div>
+                <?php foreach ($exNew as $p): ?>
                     <?php 
                         $agencyDetails = get_funding_agency_details($p);
                         $agencyText = $agencyDetails['agency_name'] . (!empty($agencyDetails['agency_type']) ? ' (' . $agencyDetails['agency_type'] . ')' : '');
@@ -941,23 +1030,25 @@ $summaryMeta = [
         ['text' => format_currency($totalBudgetCount), 'bold' => true, 'color' => '059669']
     ],
     [
-        ['text' => 'In-House New Proposals:', 'bold' => true, 'bg' => 'F8FAFC'],
-        ['text' => "{$totalInHouseCount} Projects", 'bold' => true],
-        ['text' => 'Externally Funded New:', 'bold' => true, 'bg' => 'F8FAFC'],
-        ['text' => "{$totalExternalCount} Projects", 'bold' => true, 'color' => '1A365D']
+        ['text' => 'In-House Projects:', 'bold' => true, 'bg' => 'F8FAFC'],
+        ['text' => "{$totalInHouseCount} Projects (" . ($totalInHouseCompletedCount > 0 ? "Completed: {$totalInHouseCompletedCount}, " : "") . "New: {$totalInHouseNewCount})", 'bold' => true],
+        ['text' => 'Externally Funded Projects:', 'bold' => true, 'bg' => 'F8FAFC'],
+        ['text' => "{$totalExternalCount} Projects (" . ($totalExternalCompletedCount > 0 ? "Completed: {$totalExternalCompletedCount}, " : "") . "New: {$totalExternalNewCount})", 'bold' => true, 'color' => '1A365D']
     ]
 ];
 $builder->addMetaTable($summaryMeta);
 
 // 2. Program Breakdown Table (Programs A to F) - only include programs with slated proposals!
-$matrixHeaders = ["Program", "Program Description", "In-House New", "Externally Funded", "Total Slated", "Proposed Outlay (INR)"];
+$matrixHeaders = ["Program", "Program Description", "IH Completed", "IH New", "Ext Completed", "Ext New", "Total Slated", "Proposed Outlay (INR)"];
 $matrixRows = [];
 
 foreach ($programKeys as $pKey) {
     $pData = $organized[$pKey];
-    $ihCount = count($pData['in_house']);
-    $exCount = count($pData['external']);
-    $progTotal = $ihCount + $exCount;
+    $ihCompCount = count($pData['in_house_completed']);
+    $ihNewCount = count($pData['in_house_new']);
+    $exCompCount = count($pData['external_completed']);
+    $exNewCount = count($pData['external_new']);
+    $progTotal = $ihCompCount + $ihNewCount + $exCompCount + $exNewCount;
     
     // Don't add if proposals are not there in program!
     if ($progTotal === 0) {
@@ -965,14 +1056,18 @@ foreach ($programKeys as $pKey) {
     }
 
     $progBudget = 0.0;
-    foreach ($pData['in_house'] as $p) $progBudget += (float)$p['proposed_budget'];
-    foreach ($pData['external'] as $p) $progBudget += (float)$p['proposed_budget'];
+    foreach ($pData['in_house_completed'] as $p) $progBudget += (float)($p['budget_allocated'] ?: ($p['proposed_budget'] ?? 0));
+    foreach ($pData['in_house_new'] as $p) $progBudget += (float)($p['proposed_budget'] ?? 0);
+    foreach ($pData['external_completed'] as $p) $progBudget += (float)($p['budget_allocated'] ?: ($p['proposed_budget'] ?? 0));
+    foreach ($pData['external_new'] as $p) $progBudget += (float)($p['proposed_budget'] ?? 0);
 
     $matrixRows[] = [
         "Program " . $pKey,
         $pData['name'],
-        (string)$ihCount,
-        (string)$exCount,
+        (string)$ihCompCount,
+        (string)$ihNewCount,
+        (string)$exCompCount,
+        (string)$exNewCount,
         (string)$progTotal,
         format_currency($progBudget)
     ];
@@ -983,8 +1078,10 @@ if (!empty($matrixRows)) {
     $matrixRows[] = [
         "TOTAL",
         "All Slated Proposals in Scheduled Programs",
-        (string)$totalInHouseCount,
-        (string)$totalExternalCount,
+        (string)$totalInHouseCompletedCount,
+        (string)$totalInHouseNewCount,
+        (string)$totalExternalCompletedCount,
+        (string)$totalExternalNewCount,
         (string)$totalProposalsCount,
         format_currency($totalBudgetCount)
     ];
@@ -993,21 +1090,42 @@ if (!empty($matrixRows)) {
 
 // 3. Agenda Index / Table of Contents (only if proposals exist)
 if ($totalProposalsCount > 0) {
-    $builder->addHeading("AGENDA INDEX OF SLATED NEW PROPOSALS");
-    $indexHeaders = ["S.No.", "Program", "Funding Type", "Proposal Number", "Project Title", "Principal Investigator", "Division", "Budget (INR)"];
+    $builder->addHeading("AGENDA INDEX OF SLATED PROJECTS & PROPOSALS");
+    $indexHeaders = ["S.No.", "Program", "Funding & Category", "Proposal / Project No.", "Project Title", "Principal Investigator", "Division", "Budget (INR)"];
     $indexRows = [];
     $sNo = 1;
 
     foreach ($programKeys as $pKey) {
-        if (empty($organized[$pKey]['in_house']) && empty($organized[$pKey]['external'])) {
+        $pData = $organized[$pKey];
+        $ihComp = $pData['in_house_completed'];
+        $ihNew = $pData['in_house_new'];
+        $exComp = $pData['external_completed'];
+        $exNew = $pData['external_new'];
+
+        if (empty($ihComp) && empty($ihNew) && empty($exComp) && empty($exNew)) {
             continue;
         }
-        // In-House first
-        foreach ($organized[$pKey]['in_house'] as $p) {
+
+        // 1. In-House Completed
+        foreach ($ihComp as $p) {
             $indexRows[] = [
                 (string)$sNo++,
                 "Program " . $pKey,
-                "In-House",
+                "In-House (Completed)",
+                $p['project_number'] ?: $p['proposal_number'],
+                $p['title'],
+                $p['scientist_name'],
+                $p['department_code'],
+                format_currency((float)($p['budget_allocated'] ?: $p['proposed_budget']))
+            ];
+        }
+
+        // 2. In-House New
+        foreach ($ihNew as $p) {
+            $indexRows[] = [
+                (string)$sNo++,
+                "Program " . $pKey,
+                "In-House (New)",
                 $p['proposal_number'],
                 $p['title'],
                 $p['scientist_name'],
@@ -1015,12 +1133,27 @@ if ($totalProposalsCount > 0) {
                 format_currency((float)$p['proposed_budget'])
             ];
         }
-        // Externally funded next
-        foreach ($organized[$pKey]['external'] as $p) {
+
+        // 3. External Completed
+        foreach ($exComp as $p) {
             $indexRows[] = [
                 (string)$sNo++,
                 "Program " . $pKey,
-                "External",
+                "External (Completed)",
+                $p['project_number'] ?: $p['proposal_number'],
+                $p['title'],
+                $p['scientist_name'],
+                $p['department_code'],
+                format_currency((float)($p['budget_allocated'] ?: $p['proposed_budget']))
+            ];
+        }
+
+        // 4. External New
+        foreach ($exNew as $p) {
+            $indexRows[] = [
+                (string)$sNo++,
+                "Program " . $pKey,
+                "External (New)",
                 $p['proposal_number'],
                 $p['title'],
                 $p['scientist_name'],
@@ -1035,38 +1168,64 @@ if ($totalProposalsCount > 0) {
 }
 
 // 4. Sequential Compilation: Program A through Program F
-// - Don't add if proposals are not there in program
-// - Each proposal starts from a brand new page on top in docx
+// Order per program:
+// Program X -> In-House Completed -> In-House New -> External Completed -> External New
 foreach ($programKeys as $pKey) {
     $pData = $organized[$pKey];
-    $ihProps = $pData['in_house'];
-    $exProps = $pData['external'];
+    $ihComp = $pData['in_house_completed'];
+    $ihNew = $pData['in_house_new'];
+    $exComp = $pData['external_completed'];
+    $exNew = $pData['external_new'];
 
     // Don't add if proposals are not there in program!
-    if (empty($ihProps) && empty($exProps)) {
+    if (empty($ihComp) && empty($ihNew) && empty($exComp) && empty($exNew)) {
         continue;
     }
 
     // -------------------------------------------------------------
-    // PART 1: In-House New Proposals for this Program (only if present)
+    // PART 1: In-House Completed Projects for this Program
     // -------------------------------------------------------------
-    if (!empty($ihProps)) {
-        foreach ($ihProps as $idx => $p) {
+    if (!empty($ihComp)) {
+        foreach ($ihComp as $idx => $p) {
             // Proposal starts from new page on top in docx!
             $builder->addPageBreak();
-            $contextText = "Program {$pKey} — In-House New (" . ($idx + 1) . " of " . count($ihProps) . ")";
+            $contextText = "Program {$pKey} — In-House Completed Project (" . ($idx + 1) . " of " . count($ihComp) . ")";
             render_proposal_dossier_docx($builder, $p, $contextText, $pKey);
         }
     }
 
     // -------------------------------------------------------------
-    // PART 2: Externally Funded New Proposals for this Program (only if present)
+    // PART 2: In-House New Proposals for this Program
     // -------------------------------------------------------------
-    if (!empty($exProps)) {
-        foreach ($exProps as $idx => $p) {
+    if (!empty($ihNew)) {
+        foreach ($ihNew as $idx => $p) {
             // Proposal starts from new page on top in docx!
             $builder->addPageBreak();
-            $contextText = "Program {$pKey} — Externally Funded New (" . ($idx + 1) . " of " . count($exProps) . ")";
+            $contextText = "Program {$pKey} — In-House New Proposal (" . ($idx + 1) . " of " . count($ihNew) . ")";
+            render_proposal_dossier_docx($builder, $p, $contextText, $pKey);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // PART 3: Externally Funded Completed Projects for this Program
+    // -------------------------------------------------------------
+    if (!empty($exComp)) {
+        foreach ($exComp as $idx => $p) {
+            // Proposal starts from new page on top in docx!
+            $builder->addPageBreak();
+            $contextText = "Program {$pKey} — Externally Funded Completed Project (" . ($idx + 1) . " of " . count($exComp) . ")";
+            render_proposal_dossier_docx($builder, $p, $contextText, $pKey);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // PART 4: Externally Funded New Proposals for this Program
+    // -------------------------------------------------------------
+    if (!empty($exNew)) {
+        foreach ($exNew as $idx => $p) {
+            // Proposal starts from new page on top in docx!
+            $builder->addPageBreak();
+            $contextText = "Program {$pKey} — Externally Funded New Proposal (" . ($idx + 1) . " of " . count($exNew) . ")";
             render_proposal_dossier_docx($builder, $p, $contextText, $pKey);
         }
     }

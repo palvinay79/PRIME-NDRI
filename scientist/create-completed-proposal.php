@@ -178,6 +178,7 @@ if ($linkedProjectId > 0 && !$editProposal) {
         $objectives = $selectedProject['objectives'] ?: '';
     }
 }
+$isManualSelected = ($linkedProjectId === 0 && ($editProposal || (isset($_POST['selected_db_project_id']) && $_POST['selected_db_project_id'] === 'manual') || isset($_GET['manual'])));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
@@ -185,7 +186,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $submissionAction = $_POST['submit_action'] ?? 'draft'; // 'draft' or 'submit'
     $targetStatus = ($submissionAction === 'submit') ? ($isHod ? STATUS_FORWARDED_JD : STATUS_SUBMITTED_HOD) : STATUS_DRAFT;
 
-    $linkedProjectId = (int)($_POST['linked_project_id'] ?? ($_POST['selected_db_project_id'] ?? 0));
+    $selectedDbProjectVal = trim($_POST['selected_db_project_id'] ?? '');
+    $isManualSelected = ($selectedDbProjectVal === 'manual');
+    $linkedProjectId = ($selectedDbProjectVal === 'manual') ? 0 : (int)($_POST['linked_project_id'] ?? ($selectedDbProjectVal ?: 0));
     $dbProj = null;
     if ($linkedProjectId > 0) {
         $stmtProj = $db->prepare("
@@ -306,7 +309,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Validation
     if ($submissionAction === 'submit') {
-        if ($dbProj && (int)$dbProj['scientist_id'] !== $userId && !$isHod) {
+        if (empty($selectedDbProjectVal)) {
+            $error = "Select Project for Completion is a mandatory field. Please select an active project or choose 'Project Not In System'.";
+        } elseif ($dbProj && (int)$dbProj['scientist_id'] !== $userId && !$isHod) {
             $error = "Access Restricted: You are assigned as a Co-PI on this project (View Only). Only the Principal Investigator (Lead PI) can submit project completion reports.";
         } elseif (!$dbProj && (empty($projectType) || !in_array($projectType, ['in_house', 'funding_agency']))) {
             $error = "Please select whether this is an In-house Project or Externally Funded Project.";
@@ -640,13 +645,13 @@ include __DIR__ . '/../includes/header.php';
                 <div class="col-12">
                     <div class="p-3 bg-light rounded-3 border border-primary-subtle shadow-xs">
                         <label class="form-label fw-bold text-dark d-flex justify-content-between align-items-center mb-1">
-                            <span><i class="bi bi-search text-primary me-1"></i> Select Project for Completion</span>
-                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">System Autofill</span>
+                            <span><i class="bi bi-search text-primary me-1"></i> Select Project for Completion <span class="text-danger">*</span></span>
+                            <span class="badge bg-danger text-white border">Mandatory</span>
                         </label>
                         <p class="text-muted small mb-2">
-                            Select an active project from the system database to automatically retrieve its title, project code, funding type, TRL, Co-PIs, approved budget, and tenure. If submitting a legacy or past project not in the system, select "Project Not In System".
+                            <strong>Mandatory:</strong> Select an active project from the system database to automatically retrieve its title, project code, funding type, TRL, Co-PIs, approved budget, and tenure. If submitting a legacy or past project not in the system, select "Project Not In System".
                         </p>
-                        <select name="selected_db_project_id" id="selected_db_project_id" class="form-select border-secondary-subtle" style="font-size: 0.92rem; font-weight: 500;" onchange="handleDbProjectSelection(this.value)">
+                        <select name="selected_db_project_id" id="selected_db_project_id" class="form-select border-primary shadow-xs" style="font-size: 0.95rem; font-weight: 600;" required onchange="handleDbProjectSelection(this.value)">
                             <option value="" <?= ($linkedProjectId <= 0 && empty($selectedProject) && empty($_POST) && !$editProposal && !isset($_GET['manual'])) ? 'selected' : '' ?>>-- Choose an active project to autofill details (or select manual entry below) --</option>
                             <?php if (!empty($activeProjects)): ?>
                                 <optgroup label="Your Active Projects in Database">
@@ -662,6 +667,24 @@ include __DIR__ . '/../includes/header.php';
                             </option>
                         </select>
                         <input type="hidden" name="linked_project_id" id="linked_project_id" value="<?= e($linkedProjectId > 0 ? $linkedProjectId : '') ?>">
+                    </div>
+                </div>
+
+                <!-- Guidance Box shown when no project is selected yet -->
+                <div class="col-12" id="select-project-prompt" style="display: <?= (!$selectedProject && !$isManualSelected) ? 'block' : 'none' ?>;">
+                    <div class="p-4 border rounded-3 bg-white text-center shadow-xs my-2 border-primary-subtle">
+                        <div class="mb-2">
+                            <span class="p-3 bg-primary-subtle text-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                <i class="bi bi-folder-check fs-3"></i>
+                            </span>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Select Project for Completion (Mandatory)</h6>
+                        <p class="text-muted small mb-2 mx-auto" style="max-width: 620px;">
+                            Please choose an active project from the dropdown above to autofill project code, tenure, budget, and Co-PIs. Or choose <strong>"➕ Project Not In System / Legacy Project"</strong> to enter all project details manually.
+                        </p>
+                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle">
+                            <i class="bi bi-arrow-up-circle-fill text-warning me-1"></i> Selection required above to load project fields
+                        </span>
                     </div>
                 </div>
 
@@ -770,7 +793,7 @@ include __DIR__ . '/../includes/header.php';
                 </div>
 
                 <!-- Manual Fields Section: Displayed ONLY if "Project Not In System / Legacy" is selected -->
-                <div class="col-12" id="manual-project-fields-section" style="display: <?= $selectedProject ? 'none' : 'block' ?>;">
+                <div class="col-12" id="manual-project-fields-section" style="display: <?= $isManualSelected ? 'block' : 'none' ?>;">
                     <div class="alert alert-warning border-warning-subtle small mb-3">
                         <i class="bi bi-exclamation-circle-fill text-warning me-1"></i>
                         <strong>Manual Entry Mode:</strong> Because this project is not in the active database, please provide all administrative, funding, team, and budget details below.
@@ -1011,8 +1034,8 @@ include __DIR__ . '/../includes/header.php';
                 <div class="row g-3">
                     <div class="col-md-6">
                         <div class="p-3 bg-light rounded border">
-                            <div class="text-muted extra-small text-uppercase fw-bold"><i class="bi bi-calendar-check text-primary me-1"></i> Sanctioned Project Tenure</div>
-                            <div class="fw-bold text-dark fs-6 mt-1" id="db_timeline_dates">
+                            <div class="text-muted extra-small text-uppercase fw-bold"><i class="bi bi-calendar-check text-primary me-1"></i> Sanctioned Project Tenure (DD-MM-YY)</div>
+                            <div class="fw-bold text-dark fs-6 mt-1 font-monospace" id="db_timeline_dates">
                                 <?php if ($selectedProject && !empty($selectedProject['start_date'])): ?>
                                     <?= format_date($selectedProject['start_date']) ?> &rarr; <?= format_date($selectedProject['end_date']) ?>
                                 <?php else: ?>
@@ -1052,15 +1075,17 @@ include __DIR__ . '/../includes/header.php';
             </div>
 
             <!-- Manual Timeline & Allocated Budget Inputs (Visible ONLY when manual mode is chosen) -->
-            <div id="manual-timeline-budget-inputs" style="display: <?= $selectedProject ? 'none' : 'block' ?>;">
+            <div id="manual-timeline-budget-inputs" style="display: <?= $isManualSelected ? 'block' : 'none' ?>;">
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <label class="form-label small fw-semibold text-secondary">Project Start Date <span class="text-danger">*</span></label>
-                        <input type="date" name="proposed_start_date" id="proposed_start_date" class="form-control" value="<?= e($startDate) ?>" <?= !$selectedProject ? 'required' : '' ?> onchange="calculateProjectDuration()">
+                        <label class="form-label small fw-semibold text-secondary">Project Start Date (DD-MM-YY) <span class="text-danger">*</span></label>
+                        <input type="date" name="proposed_start_date" id="proposed_start_date" class="form-control" value="<?= e($startDate) ?>" <?= $isManualSelected ? 'required' : '' ?> onchange="calculateProjectDuration()">
+                        <div id="start_date_ddmmyy_badge" class="extra-small text-primary mt-1 font-monospace"></div>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-semibold text-secondary">Project Completion / End Date <span class="text-danger">*</span></label>
-                        <input type="date" name="proposed_end_date" id="proposed_end_date" class="form-control" value="<?= e($endDate) ?>" <?= !$selectedProject ? 'required' : '' ?> onchange="calculateProjectDuration()">
+                        <label class="form-label small fw-semibold text-secondary">Project Completion / End Date (DD-MM-YY) <span class="text-danger">*</span></label>
+                        <input type="date" name="proposed_end_date" id="proposed_end_date" class="form-control" value="<?= e($endDate) ?>" <?= $isManualSelected ? 'required' : '' ?> onchange="calculateProjectDuration()">
+                        <div id="end_date_ddmmyy_badge" class="extra-small text-primary mt-1 font-monospace"></div>
                     </div>
 
                     <!-- Calculated Duration Banner -->
@@ -1296,9 +1321,10 @@ include __DIR__ . '/../includes/header.php';
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label small fw-semibold text-secondary">
-                            Proposed Extended Completion Date <span class="text-danger">*</span>
+                            Proposed Extended Completion Date (DD-MM-YY) <span class="text-danger">*</span>
                         </label>
-                        <input type="date" name="extended_end_date" id="extended_end_date" class="form-control" value="<?= e($extendedEndDate) ?>">
+                        <input type="date" name="extended_end_date" id="extended_end_date" class="form-control" value="<?= e($extendedEndDate) ?>" onchange="updateExtendedDatePreview()">
+                        <div id="extended_date_ddmmyy_badge" class="extra-small text-primary mt-1 font-monospace"></div>
                         <small class="text-muted">Must be later than current Project Completion Date.</small>
                     </div>
 
@@ -1451,8 +1477,34 @@ function handleDbProjectSelection(selectedVal) {
     const endDateInput = document.getElementById('proposed_end_date');
     const budgetAllocInput = document.getElementById('budget_allocated');
 
-    if (!selectedVal || selectedVal === 'manual') {
+    const selectPrompt = document.getElementById('select-project-prompt');
+
+    if (!selectedVal || selectedVal === '') {
         hiddenId.value = '';
+        if (selectPrompt) selectPrompt.style.display = 'block';
+        if (dbCard) dbCard.style.display = 'none';
+        if (manualFields) manualFields.style.display = 'none';
+        if (dbTimeline) dbTimeline.style.display = 'none';
+        if (manualTimeline) manualTimeline.style.display = 'none';
+
+        if (stdActions) stdActions.style.setProperty('display', 'flex', 'important');
+        if (copiActions) copiActions.style.setProperty('display', 'none', 'important');
+        if (copiWarning) copiWarning.style.setProperty('display', 'none', 'important');
+
+        // Reset required state on hidden manual fields
+        if (titleInput) titleInput.required = false;
+        if (deptSelect) deptSelect.required = false;
+        if (prioritySelect) prioritySelect.required = false;
+        if (startDateInput) startDateInput.required = false;
+        if (endDateInput) endDateInput.required = false;
+        if (budgetAllocInput) budgetAllocInput.required = false;
+        if (nationalSelect) nationalSelect.required = false;
+        return;
+    }
+
+    if (selectedVal === 'manual') {
+        hiddenId.value = '';
+        if (selectPrompt) selectPrompt.style.display = 'none';
         if (dbCard) dbCard.style.display = 'none';
         if (manualFields) manualFields.style.display = 'block';
         if (dbTimeline) dbTimeline.style.display = 'none';
@@ -1483,6 +1535,16 @@ function handleDbProjectSelection(selectedVal) {
     if (!proj) return;
 
     hiddenId.value = proj.id;
+    if (selectPrompt) selectPrompt.style.display = 'none';
+
+    // Remove required from manual fields as DB project autofills them
+    if (titleInput) titleInput.required = false;
+    if (deptSelect) deptSelect.required = false;
+    if (prioritySelect) prioritySelect.required = false;
+    if (startDateInput) startDateInput.required = false;
+    if (endDateInput) endDateInput.required = false;
+    if (budgetAllocInput) budgetAllocInput.required = false;
+    if (nationalSelect) nationalSelect.required = false;
 
     // Toggle actions based on lead PI vs Co-PI
     const isCoPiOnly = !IS_HOD && proj.scientist_id && (parseInt(proj.scientist_id, 10) !== parseInt(CURRENT_USER_ID, 10));
@@ -1729,6 +1791,14 @@ function toggleExtensionFields() {
     if (container) container.style.display = isChecked ? 'block' : 'none';
     if (extEnd) extEnd.required = isChecked;
     if (extJust) extJust.required = isChecked;
+    updateExtendedDatePreview();
+}
+
+function updateExtendedDatePreview() {
+    const extInput = document.getElementById('extended_end_date');
+    const extBadge = document.getElementById('extended_date_ddmmyy_badge');
+    if (!extInput || !extBadge) return;
+    extBadge.innerHTML = extInput.value ? `<i class="bi bi-calendar-plus me-1"></i>Date: <strong class="text-dark">${formatDdmmyy(extInput.value)}</strong> (dd-mm-yy)` : '';
 }
 
 function handleFundingAgencyChange() {
@@ -1813,12 +1883,38 @@ function toggleFundingAgencyInput() {
     }
 }
 
+// Format date to DD-MM-YY string
+function formatDdmmyy(dateVal) {
+    if (!dateVal) return '';
+    const parts = dateVal.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}-${parts[1]}-${parts[0].slice(-2)}`;
+    }
+    const dt = new Date(dateVal);
+    if (isNaN(dt.getTime())) return dateVal;
+    const d = String(dt.getDate()).padStart(2, '0');
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const y = String(dt.getFullYear()).slice(-2);
+    return `${d}-${m}-${y}`;
+}
+
 // Calculate Duration
 function calculateProjectDuration() {
-    const startVal = document.getElementById('proposed_start_date').value;
-    const endVal = document.getElementById('proposed_end_date').value;
+    const startInput = document.getElementById('proposed_start_date');
+    const endInput = document.getElementById('proposed_end_date');
+    const startVal = startInput ? startInput.value : '';
+    const endVal = endInput ? endInput.value : '';
     const display = document.getElementById('project_duration_display');
     const badge = document.getElementById('project_duration_badge');
+    const startBadge = document.getElementById('start_date_ddmmyy_badge');
+    const endBadge = document.getElementById('end_date_ddmmyy_badge');
+
+    if (startBadge) {
+        startBadge.innerHTML = startVal ? `<i class="bi bi-calendar-event me-1"></i>Date: <strong class="text-dark">${formatDdmmyy(startVal)}</strong> (dd-mm-yy)` : '';
+    }
+    if (endBadge) {
+        endBadge.innerHTML = endVal ? `<i class="bi bi-calendar-check me-1"></i>Date: <strong class="text-dark">${formatDdmmyy(endVal)}</strong> (dd-mm-yy)` : '';
+    }
 
     if (!startVal || !endVal) {
         if (display) display.value = 'Select start & end dates';
@@ -1880,10 +1976,11 @@ function calculateProjectDuration() {
     if (days > 0 || parts.length === 0) parts.push(days + (days === 1 ? ' Day' : ' Days'));
 
     const res = parts.join(', ');
-    if (display) display.value = res;
+    const ddmmyyRange = `${formatDdmmyy(startVal)} to ${formatDdmmyy(endVal)}`;
+    if (display) display.value = `${res} [${ddmmyyRange}]`;
     if (badge) {
         badge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6 fw-semibold';
-        badge.textContent = res;
+        badge.textContent = `${res} (${ddmmyyRange})`;
     }
 }
 
@@ -2498,6 +2595,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     updateWordCounts();
+    calculateProjectDuration();
+    updateExtendedDatePreview();
 
     const form = document.getElementById('completed-proposal-form') || document.querySelector('form[method="POST"]');
     if (form) {
@@ -2526,6 +2625,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (draftActionInput) draftActionInput.value = 'draft';
                 form.querySelectorAll('[required]').forEach(el => el.removeAttribute('required'));
                 return true;
+            }
+
+            // Mandatory check: Project must be selected from dropdown before submission
+            const selectElem = document.getElementById('selected_db_project_id');
+            if (!selectElem || !selectElem.value || selectElem.value === '') {
+                e.preventDefault();
+                selectElem.classList.add('is-invalid');
+                selectElem.focus();
+                selectElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                alert('Select Project for Completion is a mandatory field.\n\nPlease choose an active project from the dropdown to autofill details, or select "➕ Project Not In System / Legacy Project" for manual entry before submitting to HOD.');
+                return false;
+            } else {
+                selectElem.classList.remove('is-invalid');
             }
 
             // Validate National Priority Area
