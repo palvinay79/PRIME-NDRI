@@ -87,6 +87,75 @@ $proposals = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $programsMeta = get_institute_priority_programs();
 $programKeys = ['A', 'B', 'C', 'D', 'E', 'F'];
 
+// Fetch all divisions for per-program division-wise summary pages
+$allDepartments = $db->query("SELECT id, department_name, department_code FROM departments ORDER BY department_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+
+if (!function_exists('compute_program_division_stats')) {
+    function compute_program_division_stats(array $allDepartments, array $ihComp, array $ihNew, array $exComp, array $exNew, int $divisionFilter = 0): array {
+        $stats = [];
+        foreach ($allDepartments as $dept) {
+            $dId = (int)$dept['id'];
+            if ($divisionFilter > 0 && $dId !== $divisionFilter) {
+                continue;
+            }
+            $code = trim((string)($dept['department_code'] ?? ''));
+            $name = trim((string)($dept['department_name'] ?? ''));
+            $stats[$dId] = [
+                'label' => $name . ($code !== '' ? " ({$code})" : ''),
+                'ih_completed' => 0,
+                'ih_new' => 0,
+                'ext_completed' => 0,
+                'ext_new' => 0,
+                'total' => 0
+            ];
+        }
+
+        $tally = function(array $items, string $key) use (&$stats): void {
+            foreach ($items as $item) {
+                $dId = (int)($item['department_id'] ?? 0);
+                if (!isset($stats[$dId])) {
+                    $dName = trim((string)($item['department_name'] ?? ''));
+                    $dCode = trim((string)($item['department_code'] ?? ''));
+                    $label = $dName !== '' ? ($dName . ($dCode !== '' ? " ({$dCode})" : '')) : 'Other / Unassigned Division';
+                    $stats[$dId] = [
+                        'label' => $label,
+                        'ih_completed' => 0,
+                        'ih_new' => 0,
+                        'ext_completed' => 0,
+                        'ext_new' => 0,
+                        'total' => 0
+                    ];
+                }
+                $stats[$dId][$key]++;
+                $stats[$dId]['total']++;
+            }
+        };
+
+        $tally($ihComp, 'ih_completed');
+        $tally($ihNew, 'ih_new');
+        $tally($exComp, 'ext_completed');
+        $tally($exNew, 'ext_new');
+
+        $ihCompTot = count($ihComp);
+        $ihNewTot = count($ihNew);
+        $exCompTot = count($exComp);
+        $exNewTot = count($exNew);
+
+        return [
+            'rows' => array_values($stats),
+            'totals' => [
+                'ih_completed' => $ihCompTot,
+                'ih_new' => $ihNewTot,
+                'ext_completed' => $exCompTot,
+                'ext_new' => $exNewTot,
+                'in_house_total' => $ihCompTot + $ihNewTot,
+                'external_total' => $exCompTot + $exNewTot,
+                'total' => $ihCompTot + $ihNewTot + $exCompTot + $exNewTot
+            ]
+        ];
+    }
+}
+
 // Structure: $organized[PROGRAM_LETTER] with 4 distinct sub-groups:
 // Program X -> In house completed -> In house new -> External completed -> External new
 $organized = [];
@@ -689,6 +758,122 @@ class DocxBuilder {
         $this->body .= '</w:tbl><w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>';
     }
 
+    public function addProgramDivisionSummaryTable(string $programKey, string $programName, array $divisionRows, array $totals): void {
+        // Program top-left header
+        $this->addProgramHeaderTopLeft("PROGRAM " . $programKey . " — DIVISION-WISE PROJECT SUMMARY");
+
+        // Program descriptive subtitle
+        $this->body .= '<w:p><w:pPr><w:spacing w:before="40" w:after="140"/></w:pPr>'
+            . '<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:color w:val="334155"/><w:sz w:val="20"/></w:rPr>'
+            . '<w:t xml:space="preserve">' . $this->escape($programName) . '</w:t></w:r></w:p>';
+
+        $colWidths = [4226, 960, 960, 960, 960, 960];
+
+        $this->body .= '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>'
+            . '<w:tblBorders>'
+            . '<w:top w:val="single" w:sz="8" w:space="0" w:color="1A365D"/>'
+            . '<w:left w:val="single" w:sz="8" w:space="0" w:color="1A365D"/>'
+            . '<w:bottom w:val="single" w:sz="8" w:space="0" w:color="1A365D"/>'
+            . '<w:right w:val="single" w:sz="8" w:space="0" w:color="1A365D"/>'
+            . '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+            . '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+            . '</w:tblBorders>'
+            . '<w:tblCellMar><w:top w:w="65" w:type="dxa"/><w:bottom w:w="65" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar>'
+            . '</w:tblPr>'
+            . '<w:tblGrid>'
+            . '<w:gridCol w:w="' . $colWidths[0] . '"/>'
+            . '<w:gridCol w:w="' . $colWidths[1] . '"/>'
+            . '<w:gridCol w:w="' . $colWidths[2] . '"/>'
+            . '<w:gridCol w:w="' . $colWidths[3] . '"/>'
+            . '<w:gridCol w:w="' . $colWidths[4] . '"/>'
+            . '<w:gridCol w:w="' . $colWidths[5] . '"/>'
+            . '</w:tblGrid>';
+
+        $buildCell = function(
+            string $text,
+            int $width,
+            string $align = 'center',
+            bool $bold = false,
+            string $bg = '',
+            string $color = '1E293B',
+            int $sz = 19,
+            int $gridSpan = 1,
+            string $vMerge = ''
+        ): string {
+            $xml = '<w:tc><w:tcPr><w:tcW w:w="' . $width . '" w:type="dxa"/>';
+            if ($gridSpan > 1) {
+                $xml .= '<w:gridSpan w:val="' . $gridSpan . '"/>';
+            }
+            if ($vMerge === 'restart') {
+                $xml .= '<w:vMerge w:val="restart"/>';
+            } elseif ($vMerge === 'continue') {
+                $xml .= '<w:vMerge/>';
+            }
+            if ($bg !== '') {
+                $xml .= '<w:shd w:val="clear" w:color="auto" w:fill="' . $bg . '"/>';
+            }
+            $xml .= '<w:vAlign w:val="center"/></w:tcPr>';
+            $xml .= '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="220" w:lineRule="auto"/><w:jc w:val="' . $align . '"/></w:pPr>';
+            $xml .= '<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>'
+                . ($bold ? '<w:b/>' : '')
+                . '<w:color w:val="' . $color . '"/><w:sz w:val="' . $sz . '"/></w:rPr>'
+                . '<w:t xml:space="preserve">' . $this->escape($text) . '</w:t></w:r></w:p></w:tc>';
+            return $xml;
+        };
+
+        // Header Row 1
+        $this->body .= '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>';
+        $this->body .= $buildCell('Division / Department', $colWidths[0], 'left', true, '1A365D', 'FFFFFF', 19, 1, 'restart');
+        $this->body .= $buildCell('In-House', $colWidths[1] + $colWidths[2], 'center', true, '1E3A8A', 'FFFFFF', 19, 2);
+        $this->body .= $buildCell('Externally Funded', $colWidths[3] + $colWidths[4], 'center', true, '065F46', 'FFFFFF', 19, 2);
+        $this->body .= $buildCell('Total', $colWidths[5], 'center', true, '1A365D', 'FFFFFF', 19, 1, 'restart');
+        $this->body .= '</w:tr>';
+
+        // Header Row 2
+        $this->body .= '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>';
+        $this->body .= $buildCell('', $colWidths[0], 'left', true, '1A365D', 'FFFFFF', 18, 1, 'continue');
+        $this->body .= $buildCell('Completed', $colWidths[1], 'center', true, 'EFF6FF', '1E3A8A', 18);
+        $this->body .= $buildCell('New', $colWidths[2], 'center', true, 'EFF6FF', '1E3A8A', 18);
+        $this->body .= $buildCell('Completed', $colWidths[3], 'center', true, 'ECFDF5', '065F46', 18);
+        $this->body .= $buildCell('New', $colWidths[4], 'center', true, 'ECFDF5', '065F46', 18);
+        $this->body .= $buildCell('', $colWidths[5], 'center', true, '1A365D', 'FFFFFF', 18, 1, 'continue');
+        $this->body .= '</w:tr>';
+
+        // Division Data Rows
+        foreach ($divisionRows as $idx => $dRow) {
+            $bg = ($idx % 2 === 1) ? 'F8FAFC' : 'FFFFFF';
+            $hasAny = ((int)$dRow['total'] > 0);
+            $this->body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>';
+            $this->body .= $buildCell((string)$dRow['label'], $colWidths[0], 'left', $hasAny, $bg, '1E293B', 18);
+            $this->body .= $buildCell((string)$dRow['ih_completed'], $colWidths[1], 'center', (int)$dRow['ih_completed'] > 0, $bg, (int)$dRow['ih_completed'] > 0 ? '1E3A8A' : '64748B', 19);
+            $this->body .= $buildCell((string)$dRow['ih_new'], $colWidths[2], 'center', (int)$dRow['ih_new'] > 0, $bg, (int)$dRow['ih_new'] > 0 ? '1E3A8A' : '64748B', 19);
+            $this->body .= $buildCell((string)$dRow['ext_completed'], $colWidths[3], 'center', (int)$dRow['ext_completed'] > 0, $bg, (int)$dRow['ext_completed'] > 0 ? '065F46' : '64748B', 19);
+            $this->body .= $buildCell((string)$dRow['ext_new'], $colWidths[4], 'center', (int)$dRow['ext_new'] > 0, $bg, (int)$dRow['ext_new'] > 0 ? '065F46' : '64748B', 19);
+            $this->body .= $buildCell((string)$dRow['total'], $colWidths[5], 'center', true, $bg, $hasAny ? '1A365D' : '64748B', 19);
+            $this->body .= '</w:tr>';
+        }
+
+        // Footer Row 1: Column Totals (Completed & New totals)
+        $this->body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>';
+        $this->body .= $buildCell('TOTAL (PROGRAM ' . $programKey . ')', $colWidths[0], 'left', true, 'F1F5F9', '1A365D', 19);
+        $this->body .= $buildCell((string)$totals['ih_completed'], $colWidths[1], 'center', true, 'F1F5F9', '1E3A8A', 19);
+        $this->body .= $buildCell((string)$totals['ih_new'], $colWidths[2], 'center', true, 'F1F5F9', '1E3A8A', 19);
+        $this->body .= $buildCell((string)$totals['ext_completed'], $colWidths[3], 'center', true, 'F1F5F9', '065F46', 19);
+        $this->body .= $buildCell((string)$totals['ext_new'], $colWidths[4], 'center', true, 'F1F5F9', '065F46', 19);
+        $this->body .= $buildCell((string)$totals['total'], $colWidths[5], 'center', true, 'F1F5F9', '1A365D', 20);
+        $this->body .= '</w:tr>';
+
+        // Footer Row 2: Combined In-House & Externally Funded Totals
+        $this->body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>';
+        $this->body .= $buildCell('CATEGORY TOTAL (IN-HOUSE / EXTERNAL)', $colWidths[0], 'left', true, 'E2E8F0', '1A365D', 18);
+        $this->body .= $buildCell((string)$totals['in_house_total'], $colWidths[1] + $colWidths[2], 'center', true, 'DBEAFE', '1E3A8A', 20, 2);
+        $this->body .= $buildCell((string)$totals['external_total'], $colWidths[3] + $colWidths[4], 'center', true, 'D1FAE5', '065F46', 20, 2);
+        $this->body .= $buildCell((string)$totals['total'], $colWidths[5], 'center', true, 'E2E8F0', '1A365D', 20);
+        $this->body .= '</w:tr>';
+
+        $this->body .= '</w:tbl><w:p><w:pPr><w:spacing w:after="60"/></w:pPr></w:p>';
+    }
+
     public function generateDocx(): string {
         $xmlDoc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
@@ -1181,6 +1366,13 @@ foreach ($programKeys as $pKey) {
     if (empty($ihComp) && empty($ihNew) && empty($exComp) && empty($exNew)) {
         continue;
     }
+
+    // -------------------------------------------------------------
+    // PROGRAM COVER SUMMARY PAGE (Division-wise Counts Only)
+    // -------------------------------------------------------------
+    $builder->addPageBreak();
+    $divSummary = compute_program_division_stats($allDepartments, $ihComp, $ihNew, $exComp, $exNew, $divisionFilter);
+    $builder->addProgramDivisionSummaryTable($pKey, $pData['name'], $divSummary['rows'], $divSummary['totals']);
 
     // -------------------------------------------------------------
     // PART 1: In-House Completed Projects for this Program
