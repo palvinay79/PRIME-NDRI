@@ -4,6 +4,10 @@
  */
 
 :root {
+    --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --bs-font-sans-serif: var(--font-sans);
+    --bs-body-font-family: var(--font-sans);
     --primary-gov: #1a365d;       /* Deep Institutional Navy */
     --primary-hover: #132742;
     --accent-gold: #c59b27;       /* Official emblem gold */
@@ -14,13 +18,51 @@
     --card-border: #e2e8f0;
 }
 
+html, body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background-color: var(--bg-canvas);
     color: #1e293b;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Display Typography Hierarchy (Plus Jakarta Sans) */
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6,
+.gov-brand,
+.gov-logo-badge,
+.detail-section-header,
+.card-header,
+.modal-title {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+}
+
+.stat-card .fs-1,
+.stat-card .fs-2,
+.stat-card .fs-3,
+.stat-card .fs-4,
+.stat-card .fs-5,
+.table,
+.font-monospace {
+    font-variant-numeric: tabular-nums;
+}
+
+.btn, .form-control, .form-select, .input-group-text, .badge, .nav-link, .dropdown-item {
+    font-family: var(--font-sans);
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 0.2rem rgba(26, 54, 93, 0.14);
 }
 
 /* Institutional Top Navbar */
@@ -38,7 +80,7 @@ body {
     color: #ffffff;
     text-decoration: none;
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: -0.01em;
 }
 
 .gov-logo-badge {
@@ -93,12 +135,13 @@ body {
 }
 
 .sidebar-heading {
-    font-size: 0.75rem;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
     text-transform: uppercase;
     font-weight: 700;
     color: #64748b;
     padding: 12px 14px 6px;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.06em;
 }
 
 .nav-link-custom {
@@ -107,9 +150,9 @@ body {
     gap: 10px;
     padding: 10px 14px;
     color: #334155;
-    border-radius: 6px;
+    border-radius: 8px;
     font-weight: 500;
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     text-decoration: none;
     transition: all 0.15s ease;
     margin-bottom: 3px;
@@ -145,9 +188,9 @@ body {
 /* Stat Cards */
 .stat-card {
     border: 1px solid var(--card-border);
-    border-radius: 8px;
+    border-radius: 10px;
     background-color: #ffffff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     position: relative;
     overflow: hidden;
@@ -155,7 +198,7 @@ body {
 
 .stat-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
 .stat-card-accent {
@@ -170,17 +213,19 @@ body {
 .table-custom {
     background-color: #ffffff;
     border: 1px solid var(--card-border);
-    border-radius: 8px;
+    border-radius: 10px;
     overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .table-custom thead th {
+    font-family: var(--font-display);
     background-color: #f8fafc;
     color: #475569;
     font-weight: 600;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.04em;
     border-bottom: 1px solid var(--card-border);
     padding: 12px 16px;
 }
@@ -189,7 +234,7 @@ body {
     padding: 14px 16px;
     vertical-align: middle;
     border-bottom: 1px solid #f1f5f9;
-    font-size: 0.92rem;
+    font-size: 0.9rem;
 }
 
 .table-custom tbody tr:hover {
@@ -239,17 +284,18 @@ body {
 .timeline-content {
     background-color: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 12px 16px;
 }
 
 /* Detail view section card */
 .detail-section-card {
     border: 1px solid var(--card-border);
-    border-radius: 8px;
+    border-radius: 10px;
     background-color: #ffffff;
     margin-bottom: 24px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
 }
 
 .detail-section-header {
@@ -289,6 +335,7 @@ body {
 .ck-editor__editable_inline {
     min-height: 180px;
     max-height: 450px;
+    font-family: var(--font-sans);
     font-size: 0.95rem;
     line-height: 1.6;
     background-color: #ffffff !important;
@@ -302,6 +349,7 @@ body {
 }
 
 .ck.ck-content {
+    font-family: var(--font-sans);
     border-bottom-left-radius: 6px !important;
     border-bottom-right-radius: 6px !important;
     border-color: #cbd5e1 !important;
@@ -309,6 +357,7 @@ body {
 
 /* Rich Text Formatted Content in Details & Review Views */
 .rich-text-content {
+    font-family: var(--font-sans);
     line-height: 1.65;
     color: #334155;
 }

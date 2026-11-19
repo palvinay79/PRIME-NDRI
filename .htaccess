@@ -1,4 +1,6 @@
 # NDRI PRIME - Apache Configuration for cPanel
+DirectoryIndex index.php index.html
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
     # If installed in a subdirectory (e.g. /demo/pme/), leave RewriteBase commented out 
@@ -9,6 +11,10 @@
     RewriteRule ^data/ - [F,L]
     RewriteRule ^config/ - [F,L]
     RewriteRule \.(sql|env|json|ts|lock)$ - [F,L]
+
+    # Route root and index.html directly to PHP entry point
+    RewriteRule ^$ index.php [L,QSA]
+    RewriteRule ^index\.html$ index.php [L,QSA]
 
     # Clean URL support: If file.php exists, rewrite /path to /path.php
     RewriteCond %{REQUEST_FILENAME} !-d
@@ -30,4 +36,3 @@
 
 # Options
 Options -Indexes
-DirectoryIndex index.php index.html
