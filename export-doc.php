@@ -159,18 +159,26 @@ class DocxBuilder {
         if ($trimmed === '') {
             $trimmed = 'Not specified';
         }
-        $lines = preg_split('/\r\n|\r|\n/', $trimmed);
-        $this->body .= '<w:p><w:pPr><w:spacing w:after="100" w:line="276" w:lineRule="auto"/></w:pPr>';
-        foreach ($lines as $i => $line) {
-            if ($i > 0) {
-                $this->body .= '<w:r><w:br/></w:r>';
+        $rawLines = preg_split('/\r\n|\r|\n/', $trimmed);
+        $paragraphs = [];
+        foreach ($rawLines as $line) {
+            $cleanLine = trim($line);
+            if ($cleanLine !== '') {
+                $paragraphs[] = $cleanLine;
             }
-            $this->body .= '<w:r><w:rPr>';
+        }
+        if (empty($paragraphs)) {
+            $paragraphs = ['Not specified'];
+        }
+        $lastIdx = count($paragraphs) - 1;
+        foreach ($paragraphs as $i => $paraText) {
+            $afterSpacing = ($i === $lastIdx) ? '100' : '60';
+            $this->body .= '<w:p><w:pPr><w:jc w:val="both"/><w:spacing w:after="' . $afterSpacing . '" w:line="276" w:lineRule="auto"/></w:pPr>'
+                . '<w:r><w:rPr>';
             if ($isBold) $this->body .= '<w:b/>';
             $this->body .= '<w:color w:val="000000"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
-                . '<w:t xml:space="preserve">' . $this->escape($line) . '</w:t></w:r>';
+                . '<w:t xml:space="preserve">' . $this->escape($paraText) . '</w:t></w:r></w:p>';
         }
-        $this->body .= '</w:p>';
     }
 
     public function addRichText(?string $html, string $color = '000000'): void {
@@ -218,7 +226,7 @@ class DocxBuilder {
     public function addKeyValueRow(string $key, ?string $value): void {
         $val = trim((string)$value);
         $displayVal = ($val === '') ? 'Not specified' : $val;
-        $this->body .= '<w:p><w:pPr><w:spacing w:after="60" w:line="260" w:lineRule="auto"/></w:pPr>'
+        $this->body .= '<w:p><w:pPr><w:jc w:val="both"/><w:spacing w:after="60" w:line="260" w:lineRule="auto"/></w:pPr>'
             . '<w:r><w:rPr><w:b/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
             . '<w:t xml:space="preserve">' . $this->escape($key) . ': </w:t></w:r>'
             . '<w:r><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
