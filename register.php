@@ -170,8 +170,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="<?= url('/assets/images/ndri-prime-logo.png') ?>">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="<?= url('/assets/css/style.css?v=2.2') ?>">
+    <link rel="stylesheet" href="<?= url('/assets/css/style.css?v=2.4') ?>">
     <style>
         .role-option-card {
             cursor: pointer;
@@ -193,15 +195,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body class="bg-light d-flex flex-column min-vh-100">
 
 <!-- Government Top Header Bar -->
-<div class="gov-header py-3 px-4 shadow-sm">
+<div class="gov-header py-2 px-3 px-md-4 shadow-sm">
     <div class="container-fluid d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-3">
-            <div class="gov-logo-badge" style="width: 70px; min-width: 70px;">PRIME</div>
-            <div>
-                <h4 class="m-0 text-white fw-bold">NDRI PRIME</h4>
-                <small class="text-white-50">Project Information Management and Evaluation System</small>
+        <a href="<?= url('/login.php') ?>" class="gov-brand">
+            <div class="gov-logo-img-wrap">
+                <img src="<?= url('/assets/images/ndri-prime-logo.png') ?>" alt="NDRI PRIME Logo" class="gov-logo-img">
             </div>
-        </div>
+            <div>
+                <h4 class="m-0 text-white fw-bold lh-sm" style="letter-spacing: 0.4px;">NDRI PRIME</h4>
+                <small class="text-white-50 d-none d-sm-block" style="font-size: 0.75rem;">Project Information Management and Evaluation System</small>
+            </div>
+        </a>
         <div class="d-none d-md-flex align-items-center gap-2 text-white-50 small">
             <i class="bi bi-shield-lock-fill text-warning"></i>
             <span>Institutional Research Governance</span>

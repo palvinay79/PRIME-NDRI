@@ -27,8 +27,10 @@ $currentRoleId = current_user_role_id();
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="<?= url('/assets/images/ndri-prime-logo.png') ?>">
     <!-- Custom Theme -->
-    <link rel="stylesheet" href="<?= url('/assets/css/style.css?v=2.2') ?>">
+    <link rel="stylesheet" href="<?= url('/assets/css/style.css?v=2.4') ?>">
 </head>
 <body>
 
@@ -40,10 +42,12 @@ $currentRoleId = current_user_role_id();
                 <i class="bi bi-list fs-3"></i>
             </button>
             <a href="<?= url('/') ?>" class="gov-brand">
-                <div class="gov-logo-badge" style="width: 70px; min-width: 70px;">PRIME</div>
+                <div class="gov-logo-img-wrap">
+                    <img src="<?= url('/assets/images/ndri-prime-logo.png') ?>" alt="NDRI PRIME Logo" class="gov-logo-img">
+                </div>
                 <div>
-                    <div class="fw-bold fs-5 text-white" style="letter-spacing: 0.5px;">NDRI PRIME</div>
-                    <div class="small text-white-50 d-none d-sm-block" style="font-size: 0.75rem;">Project Information Management and Evaluation System</div>
+                    <div class="fw-bold fs-5 text-white lh-sm" style="letter-spacing: 0.4px;">NDRI PRIME</div>
+                    <div class="small text-white-50 d-none d-sm-block" style="font-size: 0.74rem; line-height: 1.25;">Project Information Management and Evaluation System</div>
                 </div>
             </a>
         </div>
