@@ -21,6 +21,11 @@ $stmt = $db->prepare("SELECT * FROM departments WHERE id = ?");
 $stmt->execute([$currentUser['department_id'] ?? 1]);
 $department = $stmt->fetch() ?: ['id' => 1, 'department_code' => 'AGB', 'department_name' => 'Animal Genetics & Breeding Division'];
 
+// Fetch user's saved profile discipline directly from DB (covers existing sessions)
+$stmtUserDisc = $db->prepare("SELECT discipline FROM users WHERE id = ?");
+$stmtUserDisc->execute([$userId]);
+$userProfileDiscipline = trim((string)($stmtUserDisc->fetchColumn() ?: ($currentUser['discipline'] ?? '')));
+
 // Fetch all departments in case user wants to specify primary division
 $allDepts = $db->query("SELECT * FROM departments ORDER BY department_name ASC")->fetchAll();
 
@@ -42,7 +47,7 @@ $fundingAgencyType = 'National';
 $yearlyBudgetMap = [];
 $institutePriority = '';
 $nationalPriority = '';
-$discipline = $currentUser['discipline'] ?? '';
+$discipline = $userProfileDiscipline;
 $technicalProgram = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -64,6 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Division / Department is strictly locked to the user's primary affiliated department
     $deptId = (int)($currentUser['department_id'] ?? $department['id']);
     $discipline = trim(sanitize($_POST['discipline'] ?? ''));
+    if ($discipline === '' && $userProfileDiscipline !== '') {
+        $discipline = $userProfileDiscipline;
+    }
     $rawPriority = trim(sanitize($_POST['institute_priority_area'] ?? ''));
     if (preg_match('/^(PROGRAM\s*)?([A-F])/i', $rawPriority, $matches)) {
         $institutePriority = strtoupper($matches[2]);

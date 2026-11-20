@@ -55,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['user']['name'] = $name;
                 $_SESSION['user']['email'] = $email;
                 $_SESSION['user']['designation'] = $designation;
+                $_SESSION['user']['discipline'] = $discipline;
 
                 log_audit($userId, 'PROFILE_UPDATED', 'users', $userId, "User updated profile information: Name={$name}, Email={$email}");
                 flash('success', "Your profile details have been successfully updated!");

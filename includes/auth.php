@@ -105,7 +105,8 @@ function login_user(array $user): void {
         'department_id' => !empty($user['department_id']) ? (int)$user['department_id'] : null,
         'department_name' => $user['department_name'] ?? null,
         'department_code' => $user['department_code'] ?? null,
-        'designation' => $user['designation'] ?? 'Scientist'
+        'designation' => $user['designation'] ?? 'Scientist',
+        'discipline' => $user['discipline'] ?? null
     ];
 
     log_audit((int)$user['id'], 'USER_LOGIN', 'users', (int)$user['id'], "User logged in successfully.");

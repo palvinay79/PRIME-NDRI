@@ -21,6 +21,12 @@ $db = get_db();
 $stmt = $db->prepare("SELECT * FROM departments WHERE id = ?");
 $stmt->execute([$currentUser['department_id'] ?? 1]);
 $department = $stmt->fetch() ?: ['id' => 1, 'department_code' => 'AGB', 'department_name' => 'Animal Genetics & Breeding Division'];
+$isSrsErsUser = in_array(strtoupper($department['department_code'] ?? ''), ['SRS', 'ERS']);
+
+// Fetch scientist's saved profile discipline directly from DB (covers active sessions without re-login)
+$stmtUserDisc = $db->prepare("SELECT discipline FROM users WHERE id = ?");
+$stmtUserDisc->execute([$userId]);
+$userProfileDiscipline = trim((string)($stmtUserDisc->fetchColumn() ?: ($currentUser['discipline'] ?? '')));
 
 // Fetch all departments
 $allDepts = $db->query("SELECT * FROM departments ORDER BY department_name ASC")->fetchAll();
@@ -29,8 +35,10 @@ $allDepts = $db->query("SELECT * FROM departments ORDER BY department_name ASC")
 if ($isHod) {
     $stmtActive = $db->prepare("
         SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level, pr.objectives,
+               pr.discipline as prop_discipline,
                pr.funding_agency_type as prop_funding_agency_type, pr.yearly_budget as prop_yearly_budget,
-               d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
+               d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation,
+               u.discipline as scientist_discipline
         FROM projects p
         LEFT JOIN proposals pr ON p.proposal_id = pr.id
         LEFT JOIN departments d ON p.department_id = d.id
@@ -43,8 +51,10 @@ if ($isHod) {
 } else {
     $stmtActive = $db->prepare("
         SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level, pr.objectives,
+               pr.discipline as prop_discipline,
                pr.funding_agency_type as prop_funding_agency_type, pr.yearly_budget as prop_yearly_budget,
-               d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
+               d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation,
+               u.discipline as scientist_discipline
         FROM projects p
         LEFT JOIN proposals pr ON p.proposal_id = pr.id
         LEFT JOIN departments d ON p.department_id = d.id
@@ -112,6 +122,10 @@ $fundingAgencyType = $editProposal['funding_agency_type'] ?? 'National';
 $yearlyBudget = $editProposal['yearly_budget'] ?? null;
 $institutePriority = $editProposal['institute_priority_area'] ?? '';
 $nationalPriority = $editProposal['national_priority_area'] ?? '';
+$discipline = trim((string)($editProposal['discipline'] ?? ''));
+if ($discipline === '') {
+    $discipline = $userProfileDiscipline;
+}
 $projectCode = $editProposal['project_number'] ?? '';
 $title = $editProposal['title'] ?? '';
 $startDate = $editProposal['proposed_start_date'] ?? '';
@@ -141,8 +155,10 @@ if ($linkedProjectId > 0 && !$editProposal) {
     if (!$selectedProject) {
         $stmtSingle = $db->prepare("
             SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level, pr.objectives,
+                   pr.discipline as prop_discipline,
                    pr.funding_agency_type as prop_funding_agency_type, pr.yearly_budget as prop_yearly_budget,
-                   d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation
+                   d.department_name, d.department_code, u.name as scientist_name, u.designation as scientist_designation,
+                   u.discipline as scientist_discipline
             FROM projects p
             LEFT JOIN proposals pr ON p.proposal_id = pr.id
             LEFT JOIN departments d ON p.department_id = d.id
@@ -174,6 +190,7 @@ if ($linkedProjectId > 0 && !$editProposal) {
         $budgetAllocated = $selectedProject['approved_budget'] ?: '';
         $institutePriority = $selectedProject['institute_priority_area'] ?: 'A';
         $nationalPriority = $selectedProject['national_priority_area'] ?: '';
+        $discipline = trim((string)($selectedProject['prop_discipline'] ?: ($selectedProject['scientist_discipline'] ?: $userProfileDiscipline)));
         $trlLevel = (int)($selectedProject['trl_level'] ?: 3);
         $objectives = $selectedProject['objectives'] ?: '';
     }
@@ -193,16 +210,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($linkedProjectId > 0) {
         $stmtProj = $db->prepare("
             SELECT p.*, pr.title as proposal_title, pr.institute_priority_area, pr.national_priority_area, pr.trl_level, pr.objectives,
+                   pr.discipline as prop_discipline,
                    pr.funding_agency_type as prop_funding_agency_type, pr.yearly_budget as prop_yearly_budget,
-                   d.department_name, d.department_code
+                   d.department_name, d.department_code, u.discipline as scientist_discipline
             FROM projects p 
             LEFT JOIN proposals pr ON p.proposal_id = pr.id 
             LEFT JOIN departments d ON p.department_id = d.id
+            LEFT JOIN users u ON p.scientist_id = u.id
             WHERE p.id = ?
         ");
         $stmtProj->execute([$linkedProjectId]);
         $dbProj = $stmtProj->fetch(PDO::FETCH_ASSOC);
     }
+
+    $postedDiscipline = trim(sanitize($_POST['discipline'] ?? ''));
 
     if ($dbProj) {
         $projectType = $dbProj['project_type'] ?: 'in_house';
@@ -212,6 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $projectCode = ($projectType === 'in_house') ? ($dbProj['project_number'] ?: '') : '';
         // Division / Department is strictly locked to the project's recorded department
         $deptId = (int)$dbProj['department_id'];
+        $discipline = $postedDiscipline ?: trim((string)($dbProj['prop_discipline'] ?: ($dbProj['scientist_discipline'] ?: $userProfileDiscipline)));
         
         $rawPriority = !empty($_POST['institute_priority_area']) ? trim(sanitize($_POST['institute_priority_area'])) : ($dbProj['institute_priority_area'] ?: 'A');
         if (preg_match('/^(PROGRAM\s*)?([A-F])/i', $rawPriority, $matches)) {
@@ -249,6 +271,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = sanitize($_POST['title'] ?? '');
         // Division / Department is strictly locked to user's affiliated department
         $deptId = (int)($currentUser['department_id'] ?: ($department['id'] ?? 1));
+        $discipline = $postedDiscipline ?: $userProfileDiscipline;
         
         $rawPriority = trim(sanitize($_POST['institute_priority_area'] ?? ''));
         if (preg_match('/^(PROGRAM\s*)?([A-F])/i', $rawPriority, $matches)) {
@@ -323,7 +346,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Project Title is mandatory.";
         } elseif (empty($deptId)) {
             $error = "Division / Department is mandatory.";
-        } elseif (($deptCode === 'SRS' || $deptCode === 'ERS') && empty($discipline)) {
+        } elseif (in_array(strtoupper($deptCode), ['SRS', 'ERS']) && empty($discipline)) {
             $error = "Discipline is required for Regional Station ({$deptCode}). Please specify your discipline.";
         } elseif (empty($institutePriority) || !in_array($institutePriority, ['A', 'B', 'C', 'D', 'E', 'F'])) {
             $error = "Institute Priority Area is mandatory. Please select Program A, B, C, D, E, or F.";
@@ -404,7 +427,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmtUpdate = $db->prepare("
                     UPDATE proposals SET
                         project_type = ?, funding_agency = ?, funding_agency_type = ?, proposal_category = 'completed', project_number = ?,
-                        title = ?, department_id = ?, institute_priority_area = ?, national_priority_area = ?,
+                        title = ?, department_id = ?, discipline = ?, institute_priority_area = ?, national_priority_area = ?,
                         trl_level = ?, proposed_start_date = ?, proposed_end_date = ?, significant_achievements = ?,
                         proposed_budget = ?, yearly_budget = ?, budget_allocated = ?, budget_utilized = ?, final_report = ?, previous_irc_atr = ?,
                         output_outcome = ?, other_details = ?, submission_remarks = ?, linked_project_id = ?, extension_requested = ?,
@@ -420,6 +443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ($projectType === 'in_house' ? $projectCode : null),
                     $title,
                     $deptId,
+                    ($discipline !== '' ? $discipline : null),
                     $institutePriority,
                     $nationalPriority,
                     $trlLevel,
@@ -455,13 +479,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $sql = "INSERT INTO proposals (
                     proposal_number, project_type, funding_agency, funding_agency_type, proposal_category, project_number,
-                    title, scientist_id, department_id, institute_priority_area, national_priority_area,
+                    title, scientist_id, department_id, discipline, institute_priority_area, national_priority_area,
                     trl_level, proposed_start_date, proposed_end_date, significant_achievements,
                     proposed_budget, yearly_budget, budget_allocated, budget_utilized, final_report, previous_irc_atr,
                     output_outcome, other_details, submission_remarks, linked_project_id, extension_requested,
                     extended_end_date, additional_funds_requested, extension_justification,
                     objectives, current_status, submitted_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                ) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
                 $stmt = $db->prepare($sql);
                 $stmt->execute([
@@ -473,6 +497,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $title,
                     $userId,
                     $deptId,
+                    ($discipline !== '' ? $discipline : null),
                     $institutePriority,
                     $nationalPriority,
                     $trlLevel,
@@ -738,6 +763,15 @@ include __DIR__ . '/../includes/header.php';
                                         </div>
                                     </div>
                                 </div>
+                                <?php $selectedIsSrsErs = in_array(strtoupper($selectedProject['department_code'] ?? ''), ['SRS', 'ERS']); ?>
+                                <div class="col-md-5" id="db_card_discipline_col" style="display: <?= $selectedIsSrsErs ? 'block' : 'none' ?>;">
+                                    <div class="p-2 rounded bg-light border">
+                                        <div class="text-muted extra-small text-uppercase fw-bold"><i class="bi bi-mortarboard text-primary me-1"></i>Regional Station Discipline</div>
+                                        <div class="fw-bold text-dark fs-6" id="db_card_discipline">
+                                            <?= e($discipline ?: ($userProfileDiscipline ?: 'Not specified')) ?>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Research Team in DB Project -->
@@ -811,6 +845,36 @@ include __DIR__ . '/../includes/header.php';
                             <input type="text" class="form-control bg-light text-dark fw-medium" value="<?= e($department['department_name']) ?> (<?= e($department['department_code']) ?>)" readonly>
                             <input type="hidden" name="department_id" id="department_id" value="<?= (int)($department['id'] ?? ($currentUser['department_id'] ?? 1)) ?>">
                             <div class="form-text extra-small text-muted mt-1"><i class="bi bi-shield-lock-fill text-secondary me-1"></i>Division is locked to your affiliated department.</div>
+                        </div>
+
+                        <!-- Conditional Discipline for SRS and ERS Regional Stations -->
+                        <div class="col-md-6" id="disciplineContainer" style="display: <?= $isSrsErsUser ? 'block' : 'none' ?>;">
+                            <label for="discipline" class="form-label small fw-semibold text-secondary">
+                                <i class="bi bi-mortarboard text-primary me-1"></i> Discipline <span class="text-danger">*</span>
+                                <span class="badge bg-primary-subtle text-primary ms-1" style="font-size: 0.7rem;">Required for <?= e($department['department_code']) ?></span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-muted"><i class="bi bi-mortarboard"></i></span>
+                                <input type="text" class="form-control" id="discipline" name="discipline"
+                                       value="<?= e($discipline) ?>"
+                                       placeholder="e.g. Dairy Cattle Nutrition / Dairy Microbiology"
+                                       list="disciplineList" <?= ($isSrsErsUser && $isManualSelected) ? 'required' : '' ?>>
+                            </div>
+                            <datalist id="disciplineList">
+                                <option value="Dairy Cattle Nutrition">
+                                <option value="Animal Genetics & Breeding">
+                                <option value="Livestock Production & Management">
+                                <option value="Animal Reproduction, Gynecology & Obstetrics">
+                                <option value="Animal Biotechnology">
+                                <option value="Dairy Microbiology">
+                                <option value="Dairy Chemistry">
+                                <option value="Dairy Technology">
+                                <option value="Dairy Engineering">
+                                <option value="Dairy Economics & Statistics">
+                                <option value="Dairy Extension Education">
+                                <option value="Forage Agronomy">
+                            </datalist>
+                            <div class="form-text extra-small text-muted">Auto-filled from your profile. Recorded for SRS / ERS regional station scientists.</div>
                         </div>
 
                         <div class="col-12">
@@ -1419,9 +1483,11 @@ const EXISTING_COPIS = <?= json_encode($existingCopis) ?>;
 
 const CURRENT_USER_ID = <?= (int)$userId ?>;
 const IS_HOD = <?= $isHod ? 'true' : 'false' ?>;
+const IS_SRS_ERS_USER = <?= $isSrsErsUser ? 'true' : 'false' ?>;
+const USER_PROFILE_DISCIPLINE = <?= json_encode($userProfileDiscipline) ?>;
 
 // Active projects in database for autofill
-const ACTIVE_PROJECTS = <?= json_encode(array_map(function($p) {
+const ACTIVE_PROJECTS = <?= json_encode(array_map(function($p) use ($userProfileDiscipline) {
     return [
         'id' => (int)$p['id'],
         'scientist_id' => (int)($p['scientist_id'] ?? 0),
@@ -1435,6 +1501,8 @@ const ACTIVE_PROJECTS = <?= json_encode(array_map(function($p) {
         'objectives' => $p['objectives'] ?: '',
         'department_id' => (int)$p['department_id'],
         'department_name' => $p['department_name'] ?: '',
+        'department_code' => $p['department_code'] ?: '',
+        'discipline' => trim((string)($p['prop_discipline'] ?: ($p['scientist_discipline'] ?: $userProfileDiscipline))),
         'start_date' => $p['start_date'] ?: '',
         'end_date' => $p['end_date'] ?: '',
         'start_date_formatted' => !empty($p['start_date']) ? format_date($p['start_date']) : '',
@@ -1464,6 +1532,7 @@ function handleDbProjectSelection(selectedVal) {
 
     const titleInput = document.getElementById('title');
     const deptSelect = document.getElementById('department_id');
+    const disciplineInput = document.getElementById('discipline');
     const inHouseRadio = document.getElementById('type_in_house');
     const fundingRadio = document.getElementById('type_funding_agency');
     const fundingAgencyInput = document.getElementById('funding_agency');
@@ -1494,6 +1563,7 @@ function handleDbProjectSelection(selectedVal) {
         // Reset required state on hidden manual fields
         if (titleInput) titleInput.required = false;
         if (deptSelect) deptSelect.required = false;
+        if (disciplineInput) disciplineInput.required = false;
         if (prioritySelect) prioritySelect.required = false;
         if (startDateInput) startDateInput.required = false;
         if (endDateInput) endDateInput.required = false;
@@ -1517,6 +1587,12 @@ function handleDbProjectSelection(selectedVal) {
         // Re-enable validation for manual entry
         if (titleInput) titleInput.required = true;
         if (deptSelect) deptSelect.required = true;
+        if (disciplineInput) {
+            disciplineInput.required = IS_SRS_ERS_USER;
+            if (!disciplineInput.value && USER_PROFILE_DISCIPLINE) {
+                disciplineInput.value = USER_PROFILE_DISCIPLINE;
+            }
+        }
         if (prioritySelect) prioritySelect.required = true;
         if (startDateInput) startDateInput.required = true;
         if (endDateInput) endDateInput.required = true;
@@ -1540,6 +1616,10 @@ function handleDbProjectSelection(selectedVal) {
     // Remove required from manual fields as DB project autofills them
     if (titleInput) titleInput.required = false;
     if (deptSelect) deptSelect.required = false;
+    if (disciplineInput) {
+        disciplineInput.required = false;
+        disciplineInput.value = proj.discipline || USER_PROFILE_DISCIPLINE || '';
+    }
     if (prioritySelect) prioritySelect.required = false;
     if (startDateInput) startDateInput.required = false;
     if (endDateInput) endDateInput.required = false;
@@ -1614,6 +1694,16 @@ function handleDbProjectSelection(selectedVal) {
     const cardDeptPriority = document.getElementById('db_card_dept_priority');
     if (cardDeptPriority) {
         cardDeptPriority.textContent = `${proj.department_name} • ${proj.institute_priority_title}`;
+    }
+
+    const cardDiscCol = document.getElementById('db_card_discipline_col');
+    const cardDiscVal = document.getElementById('db_card_discipline');
+    const isProjSrsErs = ['SRS', 'ERS'].includes((proj.department_code || '').toUpperCase());
+    if (cardDiscCol) {
+        cardDiscCol.style.display = isProjSrsErs ? 'block' : 'none';
+    }
+    if (cardDiscVal) {
+        cardDiscVal.textContent = proj.discipline || USER_PROFILE_DISCIPLINE || 'Not specified';
     }
 
     const cardPi = document.getElementById('db_card_pi');

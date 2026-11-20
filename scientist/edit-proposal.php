@@ -64,6 +64,11 @@ $pageTitle = 'Edit Proposal - ' . $proposal['proposal_number'];
 $currentUser = current_user();
 $userId = current_user_id();
 
+// Fetch scientist profile discipline directly from DB as fallback
+$stmtUserDisc = $db->prepare("SELECT discipline FROM users WHERE id = ?");
+$stmtUserDisc->execute([(int)($proposal['scientist_id'] ?? $userId)]);
+$userProfileDiscipline = trim((string)($stmtUserDisc->fetchColumn() ?: ($currentUser['discipline'] ?? '')));
+
 // Fetch Co-PIs
 $copis = get_proposal_copis($id, (int)($proposal['linked_project_id'] ?? 0), (string)($proposal['project_number'] ?? ''));
 
@@ -128,7 +133,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $fundingAgencyType = 'National';
     $title = sanitize($_POST['title'] ?? '');
-    $discipline = trim(sanitize($_POST['discipline'] ?? ($proposal['discipline'] ?? '')));
+    $discipline = trim(sanitize($_POST['discipline'] ?? ''));
+    if ($discipline === '') {
+        $discipline = trim((string)($proposal['discipline'] ?? '')) ?: $userProfileDiscipline;
+    }
     $rawPriority = trim(sanitize($_POST['institute_priority_area'] ?? ''));
     if (preg_match('/^(PROGRAM\s*)?([A-F])/i', $rawPriority, $matches)) {
         $institutePriority = strtoupper($matches[2]);
@@ -636,7 +644,7 @@ include __DIR__ . '/../includes/header.php';
                     <div class="input-group">
                         <span class="input-group-text bg-light text-muted"><i class="bi bi-mortarboard"></i></span>
                         <input type="text" class="form-control" id="discipline" name="discipline"
-                               value="<?= e($proposal['discipline'] ?? '') ?>"
+                               value="<?= e(!empty($proposal['discipline']) ? $proposal['discipline'] : $userProfileDiscipline) ?>"
                                placeholder="e.g. Dairy Cattle Nutrition / Dairy Microbiology"
                                list="disciplineList" required>
                     </div>
