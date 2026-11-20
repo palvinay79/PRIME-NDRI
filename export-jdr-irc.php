@@ -141,8 +141,12 @@ if (!function_exists('compute_program_division_stats')) {
         $exCompTot = count($exComp);
         $exNewTot = count($exNew);
 
+        $nonZeroRows = array_values(array_filter($stats, function(array $row): bool {
+            return (int)($row['total'] ?? 0) > 0;
+        }));
+
         return [
-            'rows' => array_values($stats),
+            'rows' => $nonZeroRows,
             'totals' => [
                 'ih_completed' => $ihCompTot,
                 'ih_new' => $ihNewTot,
@@ -579,44 +583,56 @@ class DocxBuilder {
 
     public function addTitle(string $mainTitle, string $subTitle = ''): void {
         $this->body .= '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="40"/></w:pPr>'
-            . '<w:r><w:rPr><w:b/><w:sz w:val="30"/><w:color w:val="1A365D"/><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr>'
+            . '<w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
             . '<w:t>' . $this->escape($mainTitle) . '</w:t></w:r></w:p>';
 
         if ($subTitle) {
             $this->body .= '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="160"/></w:pPr>'
-                . '<w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="475569"/><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr>'
+                . '<w:r><w:rPr><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
                 . '<w:t>' . $this->escape($subTitle) . '</w:t></w:r></w:p>';
         }
 
         // Horizontal line
-        $this->body .= '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="16" w:space="8" w:color="1A365D"/></w:pBdr><w:spacing w:after="160"/></w:pPr></w:p>';
+        $this->body .= '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="6" w:color="000000"/></w:pBdr><w:spacing w:after="140"/></w:pPr></w:p>';
     }
 
     public function addProgramHeaderTopLeft(string $text): void {
-        $this->body .= '<w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="60" w:after="140"/><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="6" w:color="1A365D"/></w:pBdr></w:pPr>'
-            . '<w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1A365D"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+        $this->body .= '<w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="60" w:after="100"/><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="6" w:color="000000"/></w:pBdr></w:pPr>'
+            . '<w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
             . '<w:t xml:space="preserve">' . $this->escape($text) . '</w:t></w:r></w:p>';
     }
 
+    public function addProposalDepartmentAndCategoryHeader(string $departmentName, string $projectCategoryHeading): void {
+        if (trim($departmentName) !== '') {
+            $this->body .= '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="80" w:after="40"/></w:pPr>'
+                . '<w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+                . '<w:t xml:space="preserve">' . $this->escape($departmentName) . '</w:t></w:r></w:p>';
+        }
+        if (trim($projectCategoryHeading) !== '') {
+            $this->body .= '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="140"/></w:pPr>'
+                . '<w:r><w:rPr><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+                . '<w:t xml:space="preserve">' . $this->escape($projectCategoryHeading) . '</w:t></w:r></w:p>';
+        }
+    }
+
     public function addHeading(string $title): void {
-        $this->body .= '<w:p><w:pPr><w:spacing w:before="240" w:after="80"/><w:pBdr><w:bottom w:val="single" w:sz="8" w:space="4" w:color="1A365D"/></w:pBdr></w:pPr>'
-            . '<w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="1A365D"/><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr>'
+        $this->body .= '<w:p><w:pPr><w:spacing w:before="220" w:after="80"/><w:pBdr><w:bottom w:val="single" w:sz="8" w:space="4" w:color="000000"/></w:pBdr><w:keepNext/></w:pPr>'
+            . '<w:r><w:rPr><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
             . '<w:t>' . $this->escape($title) . '</w:t></w:r></w:p>';
     }
 
     public function addSubHeading(string $title): void {
-        $this->body .= '<w:p><w:pPr><w:spacing w:before="160" w:after="40"/><w:keepNext/></w:pPr>'
-            . '<w:r><w:rPr><w:b/><w:sz w:val="21"/><w:color w:val="1E293B"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+        $this->body .= '<w:p><w:pPr><w:spacing w:before="140" w:after="40"/><w:keepNext/></w:pPr>'
+            . '<w:r><w:rPr><w:b/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
             . '<w:t xml:space="preserve">' . $this->escape($title) . '</w:t></w:r></w:p>';
     }
 
-    public function addParagraph(?string $text, bool $isBold = false, string $color = '333333'): void {
+    public function addParagraph(?string $text, bool $isBold = false, string $color = '000000'): void {
         $raw = (string)$text;
         $raw = str_replace(["\\r\\n", "\\r", "\\n"], "\n", $raw);
         $trimmed = trim($raw);
         if ($trimmed === '') {
             $trimmed = 'Not specified';
-            $color = '64748B';
         }
         $lines = preg_split('/\r\n|\r|\n/', $trimmed);
         $this->body .= '<w:p><w:pPr><w:spacing w:after="100" w:line="276" w:lineRule="auto"/></w:pPr>';
@@ -626,18 +642,17 @@ class DocxBuilder {
             }
             $this->body .= '<w:r><w:rPr>';
             if ($isBold) $this->body .= '<w:b/>';
-            if ($color !== '333333') $this->body .= '<w:color w:val="' . $color . '"/>';
-            $this->body .= '<w:sz w:val="21"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+            $this->body .= '<w:color w:val="000000"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
                 . '<w:t xml:space="preserve">' . $this->escape($line) . '</w:t></w:r>';
         }
         $this->body .= '</w:p>';
     }
 
-    public function addRichText(?string $html, string $color = '333333'): void {
+    public function addRichText(?string $html, string $color = '000000'): void {
         $raw = (string)$html;
         $raw = str_replace(["\\r\\n", "\\r", "\\n"], "\n", $raw);
         if (trim($raw) === '' || trim(strip_tags($raw)) === '') {
-            $this->addParagraph('Not specified', false, '64748B');
+            $this->addParagraph('Not specified', false, '000000');
             return;
         }
         // Convert sup and sub tags to unicode representations so they preserve correctly in Word document
@@ -668,46 +683,88 @@ class DocxBuilder {
         $formatted = html_entity_decode($formatted, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $formatted = trim($formatted);
         if ($formatted === '') {
-            $this->addParagraph('Not specified', false, '64748B');
+            $this->addParagraph('Not specified', false, '000000');
             return;
         }
-        $this->addParagraph($formatted, false, $color);
+        $this->addParagraph($formatted, false, '000000');
     }
 
     public function addKeyValueRow(string $key, ?string $value): void {
         $val = trim((string)$value);
-        $isMissing = ($val === '');
-        $displayVal = $isMissing ? 'Not specified' : $val;
-        $valColor = $isMissing ? '64748B' : '333333';
+        $displayVal = ($val === '') ? 'Not specified' : $val;
         $this->body .= '<w:p><w:pPr><w:spacing w:after="60" w:line="260" w:lineRule="auto"/></w:pPr>'
-            . '<w:r><w:rPr><w:b/><w:sz w:val="21"/><w:color w:val="1E293B"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+            . '<w:r><w:rPr><w:b/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
             . '<w:t xml:space="preserve">' . $this->escape($key) . ': </w:t></w:r>'
-            . '<w:r><w:rPr><w:sz w:val="21"/><w:color w:val="' . $valColor . '"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+            . '<w:r><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
             . '<w:t xml:space="preserve">' . $this->escape($displayVal) . '</w:t></w:r></w:p>';
     }
 
     public function addMetaTable(array $matrix): void {
-        $this->body .= '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>'
+        $totalWidth = 9026;
+        $maxCols = 0;
+        foreach ($matrix as $row) {
+            $rowSpan = 0;
+            foreach ($row as $cell) {
+                $rowSpan += max(1, (int)($cell['colspan'] ?? 1));
+            }
+            if ($rowSpan > $maxCols) {
+                $maxCols = $rowSpan;
+            }
+        }
+        if ($maxCols <= 0) {
+            return;
+        }
+
+        if ($maxCols === 4) {
+            // Balanced 4-column widths so labels like "Proposed Start Date:" stay on one line with equal space distribution
+            $colWidths = [2350, 2163, 2350, 2163];
+        } else {
+            $colWidths = [];
+            $base = intdiv($totalWidth, $maxCols);
+            $rem = $totalWidth - ($base * $maxCols);
+            for ($c = 0; $c < $maxCols; $c++) {
+                $colWidths[] = $base + ($c < $rem ? 1 : 0);
+            }
+        }
+
+        $gridXml = '<w:tblGrid>';
+        foreach ($colWidths as $cw) {
+            $gridXml .= '<w:gridCol w:w="' . $cw . '"/>';
+        }
+        $gridXml .= '</w:tblGrid>';
+
+        $this->body .= '<w:tbl><w:tblPr><w:tblW w:w="' . $totalWidth . '" w:type="dxa"/><w:tblLayout w:type="fixed"/>'
             . '<w:tblBorders>'
-            . '<w:top w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
-            . '<w:left w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
-            . '<w:bottom w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
-            . '<w:right w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
-            . '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>'
-            . '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>'
+            . '<w:top w:val="single" w:sz="6" w:space="0" w:color="000000"/>'
+            . '<w:left w:val="single" w:sz="6" w:space="0" w:color="000000"/>'
+            . '<w:bottom w:val="single" w:sz="6" w:space="0" w:color="000000"/>'
+            . '<w:right w:val="single" w:sz="6" w:space="0" w:color="000000"/>'
+            . '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
+            . '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
             . '</w:tblBorders>'
-            . '<w:tblCellMar><w:top w:w="90" w:type="dxa"/><w:bottom w:w="90" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar>'
-            . '</w:tblPr>';
+            . '<w:tblCellMar><w:top w:w="75" w:type="dxa"/><w:bottom w:w="75" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar>'
+            . '</w:tblPr>'
+            . $gridXml;
 
         foreach ($matrix as $row) {
-            $this->body .= '<w:tr>';
+            $this->body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>';
+            $colIdx = 0;
             foreach ($row as $cell) {
-                $bg = $cell['bg'] ?? 'FFFFFF';
+                $span = max(1, (int)($cell['colspan'] ?? 1));
+                $cellW = 0;
+                for ($s = 0; $s < $span; $s++) {
+                    $cellW += $colWidths[$colIdx + $s] ?? 2256;
+                }
+                $colIdx += $span;
                 $isBold = !empty($cell['bold']);
-                $color = $cell['color'] ?? '1E293B';
-                $this->body .= '<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="' . $bg . '"/></w:tcPr>'
-                    . '<w:p><w:pPr><w:spacing w:after="40"/></w:pPr>'
-                    . '<w:r><w:rPr><w:sz w:val="20"/><w:color w:val="' . $color . '"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>' . ($isBold ? '<w:b/>' : '') . '</w:rPr>'
+                $tcPr = '<w:tcPr><w:tcW w:w="' . $cellW . '" w:type="dxa"/>';
+                if ($span > 1) {
+                    $tcPr .= '<w:gridSpan w:val="' . $span . '"/>';
+                }
+                $tcPr .= '<w:vAlign w:val="center"/></w:tcPr>';
+                $this->body .= '<w:tc>' . $tcPr
+                    . '<w:p><w:pPr><w:spacing w:before="0" w:after="20" w:line="240" w:lineRule="auto"/></w:pPr>'
+                    . '<w:r><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>' . ($isBold ? '<w:b/>' : '') . '</w:rPr>'
                     . '<w:t xml:space="preserve">' . $this->escape($cell['text'] ?? '') . '</w:t></w:r></w:p></w:tc>';
             }
             $this->body .= '</w:tr>';
@@ -718,22 +775,22 @@ class DocxBuilder {
     public function addTable(array $headers, array $rows): void {
         $this->body .= '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>'
             . '<w:tblBorders>'
-            . '<w:top w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
-            . '<w:left w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
-            . '<w:bottom w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
-            . '<w:right w:val="single" w:sz="6" w:space="0" w:color="CBD5E1"/>'
-            . '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>'
-            . '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>'
+            . '<w:top w:val="single" w:sz="6" w:space="0" w:color="000000"/>'
+            . '<w:left w:val="single" w:sz="6" w:space="0" w:color="000000"/>'
+            . '<w:bottom w:val="single" w:sz="6" w:space="0" w:color="000000"/>'
+            . '<w:right w:val="single" w:sz="6" w:space="0" w:color="000000"/>'
+            . '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
+            . '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
             . '</w:tblBorders>'
-            . '<w:tblCellMar><w:top w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar>'
+            . '<w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar>'
             . '</w:tblPr>';
 
-        // Header Row
-        $this->body .= '<w:tr><w:trPr><w:tblHeader/></w:trPr>';
+        // Header Row (no background fill, strictly black bold 11pt)
+        $this->body .= '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>';
         foreach ($headers as $h) {
-            $this->body .= '<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/></w:tcPr>'
-                . '<w:p><w:pPr><w:spacing w:after="40"/></w:pPr>'
-                . '<w:r><w:rPr><w:b/><w:sz w:val="20"/><w:color w:val="1E293B"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+            $this->body .= '<w:tc><w:tcPr><w:vAlign w:val="center"/></w:tcPr>'
+                . '<w:p><w:pPr><w:spacing w:before="0" w:after="20"/></w:pPr>'
+                . '<w:r><w:rPr><w:b/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
                 . '<w:t xml:space="preserve">' . $this->escape($h) . '</w:t></w:r></w:p></w:tc>';
         }
         $this->body .= '</w:tr>';
@@ -742,14 +799,14 @@ class DocxBuilder {
         if (empty($rows)) {
             $colCount = count($headers);
             $this->body .= '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="' . $colCount . '"/></w:tcPr>'
-                . '<w:p><w:pPr><w:spacing w:after="40"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="20"/><w:color w:val="64748B"/></w:rPr>'
+                . '<w:p><w:pPr><w:spacing w:before="0" w:after="20"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
                 . '<w:t>None recorded.</w:t></w:r></w:p></w:tc></w:tr>';
         } else {
             foreach ($rows as $row) {
-                $this->body .= '<w:tr>';
+                $this->body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>';
                 foreach ($row as $cell) {
-                    $this->body .= '<w:tc><w:p><w:pPr><w:spacing w:after="40"/></w:pPr>'
-                        . '<w:r><w:rPr><w:sz w:val="20"/><w:color w:val="333333"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
+                    $this->body .= '<w:tc><w:p><w:pPr><w:spacing w:before="0" w:after="20"/></w:pPr>'
+                        . '<w:r><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr>'
                         . '<w:t xml:space="preserve">' . $this->escape((string)$cell) . '</w:t></w:r></w:p></w:tc>';
                 }
                 $this->body .= '</w:tr>';
@@ -762,23 +819,24 @@ class DocxBuilder {
         // Program top-left header
         $this->addProgramHeaderTopLeft("PROGRAM " . $programKey . " — DIVISION-WISE PROJECT SUMMARY");
 
-        // Program descriptive subtitle
+        // Program descriptive subtitle (11pt black bold)
         $this->body .= '<w:p><w:pPr><w:spacing w:before="40" w:after="140"/></w:pPr>'
-            . '<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:color w:val="334155"/><w:sz w:val="20"/></w:rPr>'
+            . '<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:color w:val="000000"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>'
             . '<w:t xml:space="preserve">' . $this->escape($programName) . '</w:t></w:r></w:p>';
 
-        $colWidths = [4226, 960, 960, 960, 960, 960];
+        // Exact 9026 twips across 6 columns so "Completed" fits on one line at 11pt bold
+        $colWidths = [3626, 1150, 950, 1150, 950, 1200];
 
-        $this->body .= '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>'
+        $this->body .= '<w:tbl><w:tblPr><w:tblW w:w="9026" w:type="dxa"/><w:tblLayout w:type="fixed"/>'
             . '<w:tblBorders>'
-            . '<w:top w:val="single" w:sz="8" w:space="0" w:color="1A365D"/>'
-            . '<w:left w:val="single" w:sz="8" w:space="0" w:color="1A365D"/>'
-            . '<w:bottom w:val="single" w:sz="8" w:space="0" w:color="1A365D"/>'
-            . '<w:right w:val="single" w:sz="8" w:space="0" w:color="1A365D"/>'
-            . '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
-            . '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>'
+            . '<w:top w:val="single" w:sz="8" w:space="0" w:color="000000"/>'
+            . '<w:left w:val="single" w:sz="8" w:space="0" w:color="000000"/>'
+            . '<w:bottom w:val="single" w:sz="8" w:space="0" w:color="000000"/>'
+            . '<w:right w:val="single" w:sz="8" w:space="0" w:color="000000"/>'
+            . '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
+            . '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/>'
             . '</w:tblBorders>'
-            . '<w:tblCellMar><w:top w:w="65" w:type="dxa"/><w:bottom w:w="65" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar>'
+            . '<w:tblCellMar><w:top w:w="70" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:left w:w="70" w:type="dxa"/><w:right w:w="70" w:type="dxa"/></w:tblCellMar>'
             . '</w:tblPr>'
             . '<w:tblGrid>'
             . '<w:gridCol w:w="' . $colWidths[0] . '"/>'
@@ -794,9 +852,6 @@ class DocxBuilder {
             int $width,
             string $align = 'center',
             bool $bold = false,
-            string $bg = '',
-            string $color = '1E293B',
-            int $sz = 19,
             int $gridSpan = 1,
             string $vMerge = ''
         ): string {
@@ -809,66 +864,64 @@ class DocxBuilder {
             } elseif ($vMerge === 'continue') {
                 $xml .= '<w:vMerge/>';
             }
-            if ($bg !== '') {
-                $xml .= '<w:shd w:val="clear" w:color="auto" w:fill="' . $bg . '"/>';
-            }
             $xml .= '<w:vAlign w:val="center"/></w:tcPr>';
-            $xml .= '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="220" w:lineRule="auto"/><w:jc w:val="' . $align . '"/></w:pPr>';
+            $xml .= '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="' . $align . '"/></w:pPr>';
             $xml .= '<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>'
                 . ($bold ? '<w:b/>' : '')
-                . '<w:color w:val="' . $color . '"/><w:sz w:val="' . $sz . '"/></w:rPr>'
+                . '<w:color w:val="000000"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>'
                 . '<w:t xml:space="preserve">' . $this->escape($text) . '</w:t></w:r></w:p></w:tc>';
             return $xml;
         };
 
-        // Header Row 1
+        // Header Row 1 (no background fill, strictly black bold 11pt)
         $this->body .= '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>';
-        $this->body .= $buildCell('Division / Department', $colWidths[0], 'left', true, '1A365D', 'FFFFFF', 19, 1, 'restart');
-        $this->body .= $buildCell('In-House', $colWidths[1] + $colWidths[2], 'center', true, '1E3A8A', 'FFFFFF', 19, 2);
-        $this->body .= $buildCell('Externally Funded', $colWidths[3] + $colWidths[4], 'center', true, '065F46', 'FFFFFF', 19, 2);
-        $this->body .= $buildCell('Total', $colWidths[5], 'center', true, '1A365D', 'FFFFFF', 19, 1, 'restart');
+        $this->body .= $buildCell('Division / Department', $colWidths[0], 'left', true, 1, 'restart');
+        $this->body .= $buildCell('In-House', $colWidths[1] + $colWidths[2], 'center', true, 2);
+        $this->body .= $buildCell('Externally Funded', $colWidths[3] + $colWidths[4], 'center', true, 2);
+        $this->body .= $buildCell('Total', $colWidths[5], 'center', true, 1, 'restart');
         $this->body .= '</w:tr>';
 
         // Header Row 2
         $this->body .= '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>';
-        $this->body .= $buildCell('', $colWidths[0], 'left', true, '1A365D', 'FFFFFF', 18, 1, 'continue');
-        $this->body .= $buildCell('Completed', $colWidths[1], 'center', true, 'EFF6FF', '1E3A8A', 18);
-        $this->body .= $buildCell('New', $colWidths[2], 'center', true, 'EFF6FF', '1E3A8A', 18);
-        $this->body .= $buildCell('Completed', $colWidths[3], 'center', true, 'ECFDF5', '065F46', 18);
-        $this->body .= $buildCell('New', $colWidths[4], 'center', true, 'ECFDF5', '065F46', 18);
-        $this->body .= $buildCell('', $colWidths[5], 'center', true, '1A365D', 'FFFFFF', 18, 1, 'continue');
+        $this->body .= $buildCell('', $colWidths[0], 'left', true, 1, 'continue');
+        $this->body .= $buildCell('Completed', $colWidths[1], 'center', true);
+        $this->body .= $buildCell('New', $colWidths[2], 'center', true);
+        $this->body .= $buildCell('Completed', $colWidths[3], 'center', true);
+        $this->body .= $buildCell('New', $colWidths[4], 'center', true);
+        $this->body .= $buildCell('', $colWidths[5], 'center', true, 1, 'continue');
         $this->body .= '</w:tr>';
 
-        // Division Data Rows
-        foreach ($divisionRows as $idx => $dRow) {
-            $bg = ($idx % 2 === 1) ? 'F8FAFC' : 'FFFFFF';
-            $hasAny = ((int)$dRow['total'] > 0);
+        // Division Data Rows (only non-zero divisions passed in)
+        foreach ($divisionRows as $dRow) {
+            if ((int)($dRow['total'] ?? 0) <= 0) {
+                continue;
+            }
             $this->body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>';
-            $this->body .= $buildCell((string)$dRow['label'], $colWidths[0], 'left', $hasAny, $bg, '1E293B', 18);
-            $this->body .= $buildCell((string)$dRow['ih_completed'], $colWidths[1], 'center', (int)$dRow['ih_completed'] > 0, $bg, (int)$dRow['ih_completed'] > 0 ? '1E3A8A' : '64748B', 19);
-            $this->body .= $buildCell((string)$dRow['ih_new'], $colWidths[2], 'center', (int)$dRow['ih_new'] > 0, $bg, (int)$dRow['ih_new'] > 0 ? '1E3A8A' : '64748B', 19);
-            $this->body .= $buildCell((string)$dRow['ext_completed'], $colWidths[3], 'center', (int)$dRow['ext_completed'] > 0, $bg, (int)$dRow['ext_completed'] > 0 ? '065F46' : '64748B', 19);
-            $this->body .= $buildCell((string)$dRow['ext_new'], $colWidths[4], 'center', (int)$dRow['ext_new'] > 0, $bg, (int)$dRow['ext_new'] > 0 ? '065F46' : '64748B', 19);
-            $this->body .= $buildCell((string)$dRow['total'], $colWidths[5], 'center', true, $bg, $hasAny ? '1A365D' : '64748B', 19);
+            $this->body .= $buildCell((string)$dRow['label'], $colWidths[0], 'left', false);
+            $this->body .= $buildCell((string)$dRow['ih_completed'], $colWidths[1], 'center', false);
+            $this->body .= $buildCell((string)$dRow['ih_new'], $colWidths[2], 'center', false);
+            $this->body .= $buildCell((string)$dRow['ext_completed'], $colWidths[3], 'center', false);
+            $this->body .= $buildCell((string)$dRow['ext_new'], $colWidths[4], 'center', false);
+            $this->body .= $buildCell((string)$dRow['total'], $colWidths[5], 'center', true);
             $this->body .= '</w:tr>';
         }
 
         // Footer Row 1: Column Totals (Completed & New totals)
         $this->body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>';
-        $this->body .= $buildCell('TOTAL (PROGRAM ' . $programKey . ')', $colWidths[0], 'left', true, 'F1F5F9', '1A365D', 19);
-        $this->body .= $buildCell((string)$totals['ih_completed'], $colWidths[1], 'center', true, 'F1F5F9', '1E3A8A', 19);
-        $this->body .= $buildCell((string)$totals['ih_new'], $colWidths[2], 'center', true, 'F1F5F9', '1E3A8A', 19);
-        $this->body .= $buildCell((string)$totals['ext_completed'], $colWidths[3], 'center', true, 'F1F5F9', '065F46', 19);
-        $this->body .= $buildCell((string)$totals['ext_new'], $colWidths[4], 'center', true, 'F1F5F9', '065F46', 19);
-        $this->body .= $buildCell((string)$totals['total'], $colWidths[5], 'center', true, 'F1F5F9', '1A365D', 20);
+        $this->body .= $buildCell('TOTAL (PROGRAM ' . $programKey . ')', $colWidths[0], 'left', true);
+        $this->body .= $buildCell((string)$totals['ih_completed'], $colWidths[1], 'center', true);
+        $this->body .= $buildCell((string)$totals['ih_new'], $colWidths[2], 'center', true);
+        $this->body .= $buildCell((string)$totals['ext_completed'], $colWidths[3], 'center', true);
+        $this->body .= $buildCell((string)$totals['ext_new'], $colWidths[4], 'center', true);
+        $this->body .= $buildCell((string)$totals['total'], $colWidths[5], 'center', true);
         $this->body .= '</w:tr>';
 
         // Footer Row 2: Combined In-House & Externally Funded Totals
         $this->body .= '<w:tr><w:trPr><w:cantSplit/></w:trPr>';
-        $this->body .= $buildCell('CATEGORY TOTAL (IN-HOUSE / EXTERNAL)', $colWidths[0], 'left', true, 'E2E8F0', '1A365D', 18);
-        $this->body .= $buildCell((string)$totals['in_house_total'], $colWidths[1] + $colWidths[2], 'center', true, 'DBEAFE', '1E3A8A', 20, 2);
-        $this->body .= $buildCell((string)$totals['external_total'], $colWidths[3] + $colWidths[4], 'center', true, 'D1FAE5', '065F46', 20, 2);
-        $this->body .= $buildCell((string)$totals['total'], $colWidths[5], 'center', true, 'E2E8F0', '1A365D', 20);
+        $this->body .= $buildCell('CATEGORY TOTAL (IN-HOUSE / EXTERNAL)', $colWidths[0], 'left', true);
+        $this->body .= $buildCell((string)$totals['in_house_total'], $colWidths[1] + $colWidths[2], 'center', true, 2);
+        $this->body .= $buildCell((string)$totals['external_total'], $colWidths[3] + $colWidths[4], 'center', true, 2);
+        $this->body .= $buildCell((string)$totals['total'], $colWidths[5], 'center', true);
         $this->body .= '</w:tr>';
 
         $this->body .= '</w:tbl><w:p><w:pPr><w:spacing w:after="60"/></w:pPr></w:p>';
@@ -907,7 +960,7 @@ class DocxBuilder {
         $styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
             . '<w:docDefaults>'
-            . '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:color w:val="222222"/></w:rPr></w:rPrDefault>'
+            . '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/></w:rPr></w:rPrDefault>'
             . '<w:pPrDefault><w:pPr><w:spacing w:line="276" w:lineRule="auto" w:after="120"/></w:pPr></w:pPrDefault>'
             . '</w:docDefaults>'
             . '</w:styles>';
@@ -987,36 +1040,46 @@ if (!function_exists('format_file_size')) {
  */
 if (!function_exists('render_proposal_dossier_docx')) {
 function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, string $programHeaderInfo = '', string $programLetter = ''): void {
-    $cat = $proposal['proposal_category'] ?? 'new';
+    $cat = strtolower(trim((string)($proposal['proposal_category'] ?? 'new')));
+    $isExternal = (($proposal['project_type'] ?? '') === 'funding_agency');
     $progKey = !empty($programLetter) ? $programLetter : resolve_program_letter($proposal['institute_priority_area'] ?? '');
 
-    // On top of proposal name: Remove "NDRI etc" and add Program A or B or C etc on top left
-    $builder->addProgramHeaderTopLeft("PROGRAM " . $progKey);
+    if ($cat === 'completed') {
+        $projectTypeHeading = $isExternal ? 'Completed Externally Funded Research Project' : 'Completed In-house Research Project';
+    } elseif ($cat === 'ongoing') {
+        $projectTypeHeading = $isExternal ? 'Ongoing Externally Funded Research Project' : 'Ongoing In-house Research Project';
+    } else {
+        $projectTypeHeading = $isExternal ? 'New Externally Funded Research Project' : 'New In-house Research Project';
+    }
 
-    // Metadata Overview Table
+    // Top Header: Program X, followed by centered Department (14pt) and centered Project Classification
+    $builder->addProgramHeaderTopLeft("PROGRAM " . $progKey);
+    $builder->addProposalDepartmentAndCategoryHeader((string)($proposal['department_name'] ?? ''), $projectTypeHeading);
+
+    // Metadata Overview Table (no background fills, strictly black text, balanced full-width columns)
     $metaMatrix = [
         [
-            ['text' => 'Proposal Number:', 'bold' => true, 'bg' => 'F8FAFC'],
-            ['text' => (string)$proposal['proposal_number'], 'bold' => true, 'color' => '1A365D'],
-            ['text' => 'Current Status:', 'bold' => true, 'bg' => 'F8FAFC'],
-            ['text' => (string)$proposal['current_status'], 'bold' => true, 'color' => '059669']
+            ['text' => 'Proposal Number:', 'bold' => true],
+            ['text' => (string)$proposal['proposal_number'], 'bold' => true],
+            ['text' => 'Current Status:', 'bold' => true],
+            ['text' => (string)$proposal['current_status'], 'bold' => true]
         ],
         [
-            ['text' => 'Principal Investigator:', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => 'Principal Investigator:', 'bold' => true],
             ['text' => $proposal['scientist_name'] . ' (' . $proposal['scientist_email'] . ')'],
-            ['text' => 'Department / Division:', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => 'Department / Division:', 'bold' => true],
             ['text' => (string)$proposal['department_name']]
         ],
         [
-            ['text' => 'Proposed Start Date:', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => 'Proposed Start Date:', 'bold' => true],
             ['text' => format_date($proposal['proposed_start_date'])],
-            ['text' => 'Proposed End Date:', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => 'Proposed End Date:', 'bold' => true],
             ['text' => format_date($proposal['proposed_end_date'])]
         ],
         [
-            ['text' => 'Proposed Duration:', 'bold' => true, 'bg' => 'F8FAFC'],
-            ['text' => format_duration($proposal['proposed_start_date'], $proposal['proposed_end_date']), 'bold' => true, 'color' => '1A365D'],
-            ['text' => 'Technology Readiness Level:', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => 'Proposed Duration:', 'bold' => true],
+            ['text' => format_duration($proposal['proposed_start_date'], $proposal['proposed_end_date']), 'bold' => true],
+            ['text' => 'Technology Readiness Level:', 'bold' => true],
             ['text' => 'TRL-' . $proposal['trl_level']]
         ]
     ];
@@ -1025,22 +1088,21 @@ function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, str
         $allocAmt = (float)($proposal['budget_allocated'] ?: $proposal['proposed_budget']);
         $utilAmt = (float)$proposal['budget_utilized'];
         $metaMatrix[] = [
-            ['text' => 'Budget Allocated (INR):', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => 'Budget Allocated (INR):', 'bold' => true],
             ['text' => format_currency($allocAmt), 'bold' => true],
-            ['text' => 'Budget Utilized (INR):', 'bold' => true, 'bg' => 'F8FAFC'],
-            ['text' => format_currency($utilAmt), 'bold' => true, 'color' => ($allocAmt > 0 && $utilAmt > $allocAmt) ? 'DC2626' : '059669']
+            ['text' => 'Budget Utilized (INR):', 'bold' => true],
+            ['text' => format_currency($utilAmt), 'bold' => true]
         ];
     } else {
         $metaMatrix[] = [
-            ['text' => 'Proposed Budget (INR):', 'bold' => true, 'bg' => 'F8FAFC'],
+            ['text' => 'Proposed Budget (INR):', 'bold' => true],
             ['text' => format_currency((float)$proposal['proposed_budget']), 'bold' => true],
-            ['text' => 'Project Category:', 'bold' => true, 'bg' => 'F8FAFC'],
-            ['text' => ($proposal['project_type'] ?? '') === 'funding_agency' ? 'Externally Funded Project' : 'In-house Project', 'bold' => true, 'color' => ($proposal['project_type'] ?? '') === 'funding_agency' ? '059669' : '1A365D']
+            ['text' => 'Project Category:', 'bold' => true],
+            ['text' => $isExternal ? 'Externally Funded Project' : 'In-house Project', 'bold' => true]
         ];
     }
 
-    // Funding Agency: only show for externally funded projects. For in-house projects, it is covered in Project Category.
-    $isExternal = (($proposal['project_type'] ?? '') === 'funding_agency');
+    // Funding Agency: only show for externally funded projects. Use colspan=3 when no second pair exists so no empty cells show.
     if ($isExternal) {
         $agencyDetails = get_funding_agency_details($proposal);
         $agencyName = trim($agencyDetails['agency_name'] ?? '');
@@ -1051,18 +1113,23 @@ function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, str
             $agencyName = 'External Funding Agency';
         }
 
-        $metaMatrix[] = [
-            ['text' => 'Funding Agency:', 'bold' => true, 'bg' => 'F8FAFC'],
-            ['text' => $agencyName, 'bold' => true, 'color' => '1A365D'],
-            ['text' => !empty($proposal['project_number']) ? 'Project Code:' : '', 'bold' => !empty($proposal['project_number']), 'bg' => !empty($proposal['project_number']) ? 'F8FAFC' : 'FFFFFF'],
-            ['text' => (string)($proposal['project_number'] ?? ''), 'bold' => !empty($proposal['project_number'])]
-        ];
+        if (!empty($proposal['project_number'])) {
+            $metaMatrix[] = [
+                ['text' => 'Funding Agency:', 'bold' => true],
+                ['text' => $agencyName, 'bold' => true],
+                ['text' => 'Project Code:', 'bold' => true],
+                ['text' => (string)$proposal['project_number'], 'bold' => true]
+            ];
+        } else {
+            $metaMatrix[] = [
+                ['text' => 'Funding Agency:', 'bold' => true],
+                ['text' => $agencyName, 'bold' => true, 'colspan' => 3]
+            ];
+        }
     } elseif (!empty($proposal['project_number'])) {
         $metaMatrix[] = [
-            ['text' => 'Project Code:', 'bold' => true, 'bg' => 'F8FAFC'],
-            ['text' => (string)$proposal['project_number'], 'bold' => true, 'color' => '1A365D'],
-            ['text' => '', 'bg' => 'FFFFFF'],
-            ['text' => '']
+            ['text' => 'Project Code:', 'bold' => true],
+            ['text' => (string)$proposal['project_number'], 'bold' => true, 'colspan' => 3]
         ];
     }
 
@@ -1070,7 +1137,7 @@ function render_proposal_dossier_docx(DocxBuilder $builder, array $proposal, str
 
     // Section 1: Title
     $builder->addHeading("1. PROJECT TITLE");
-    $builder->addParagraph($proposal['title'], true, '1A365D');
+    $builder->addParagraph($proposal['title'], true);
 
     // Section 2: Priority Alignment
     $builder->addHeading("2. PRIORITY ALIGNMENT");
@@ -1197,28 +1264,28 @@ $builder->addTitle(
 
 $summaryMeta = [
     [
-        ['text' => 'Dossier Purpose:', 'bold' => true, 'bg' => 'F8FAFC'],
-        ['text' => 'Official Deliberation Dossier for Institute Research Council (IRC) Meeting', 'bold' => true, 'color' => '1A365D'],
-        ['text' => 'Compilation Authority:', 'bold' => true, 'bg' => 'F8FAFC'],
+        ['text' => 'Dossier Purpose:', 'bold' => true],
+        ['text' => 'Official Deliberation Dossier for Institute Research Council (IRC) Meeting', 'bold' => true],
+        ['text' => 'Compilation Authority:', 'bold' => true],
         ['text' => 'Joint Director (Research) & Directorate of Research', 'bold' => true]
     ],
     [
-        ['text' => 'Date of Compilation:', 'bold' => true, 'bg' => 'F8FAFC'],
+        ['text' => 'Date of Compilation:', 'bold' => true],
         ['text' => date('d F, Y, h:i A')],
-        ['text' => 'Council Deliberation Stage:', 'bold' => true, 'bg' => 'F8FAFC'],
-        ['text' => 'Approved for IRC Meeting Deliberation (Slated)', 'bold' => true, 'color' => '059669']
+        ['text' => 'Council Deliberation Stage:', 'bold' => true],
+        ['text' => 'Approved for IRC Meeting Deliberation (Slated)', 'bold' => true]
     ],
     [
-        ['text' => 'Total Proposals Slated:', 'bold' => true, 'bg' => 'F8FAFC'],
-        ['text' => "{$totalProposalsCount} Research Proposals", 'bold' => true, 'color' => '1A365D'],
-        ['text' => 'Total Proposed Outlay:', 'bold' => true, 'bg' => 'F8FAFC'],
-        ['text' => format_currency($totalBudgetCount), 'bold' => true, 'color' => '059669']
+        ['text' => 'Total Proposals Slated:', 'bold' => true],
+        ['text' => "{$totalProposalsCount} Research Proposals", 'bold' => true],
+        ['text' => 'Total Proposed Outlay:', 'bold' => true],
+        ['text' => format_currency($totalBudgetCount), 'bold' => true]
     ],
     [
-        ['text' => 'In-House Projects:', 'bold' => true, 'bg' => 'F8FAFC'],
+        ['text' => 'In-House Projects:', 'bold' => true],
         ['text' => "{$totalInHouseCount} Projects (" . ($totalInHouseCompletedCount > 0 ? "Completed: {$totalInHouseCompletedCount}, " : "") . "New: {$totalInHouseNewCount})", 'bold' => true],
-        ['text' => 'Externally Funded Projects:', 'bold' => true, 'bg' => 'F8FAFC'],
-        ['text' => "{$totalExternalCount} Projects (" . ($totalExternalCompletedCount > 0 ? "Completed: {$totalExternalCompletedCount}, " : "") . "New: {$totalExternalNewCount})", 'bold' => true, 'color' => '1A365D']
+        ['text' => 'Externally Funded Projects:', 'bold' => true],
+        ['text' => "{$totalExternalCount} Projects (" . ($totalExternalCompletedCount > 0 ? "Completed: {$totalExternalCompletedCount}, " : "") . "New: {$totalExternalNewCount})", 'bold' => true]
     ]
 ];
 $builder->addMetaTable($summaryMeta);
