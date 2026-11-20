@@ -376,8 +376,8 @@ include __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div class="row g-4">
-    <!-- Recent Proposals -->
-    <div class="col-lg-8">
+    <!-- Recent Proposals (Full Width) -->
+    <div class="col-12">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
@@ -413,12 +413,12 @@ include __DIR__ . '/../includes/header.php';
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>Proposal #</th>
-                            <th>Type</th>
+                            <th style="width: 165px;">Proposal #</th>
+                            <th style="width: 120px;">Type</th>
                             <th>Title & Details</th>
-                            <th>Status</th>
-                            <th>Budget</th>
-                            <th class="text-end">Actions</th>
+                            <th style="width: 175px;">Status</th>
+                            <th style="width: 130px;">Budget</th>
+                            <th style="width: 150px;" class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -460,7 +460,7 @@ include __DIR__ . '/../includes/header.php';
                                     </td>
                                     <td>
                                         <a href="<?= url("/scientist/proposal-details.php?id=" . ($prop['id']) . "") ?>" class="text-decoration-none fw-semibold text-dark d-block">
-                                            <?= e(mb_strimwidth($prop['title'], 0, 42, '...')) ?>
+                                            <?= e(mb_strimwidth($prop['title'], 0, 90, '...')) ?>
                                         </a>
                                         <small class="text-muted"><?= e($prop['department_name']) ?> | TRL-<?= e($prop['trl_level']) ?></small>
                                         <?php if ($isCoPi && !empty($prop['lead_pi_name'])): ?>
@@ -516,8 +516,8 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <!-- Active Projects & Progress Tracking -->
-    <div class="col-lg-4">
+    <!-- Active Projects & Progress Tracking (Full Width Below My Proposals) -->
+    <div class="col-12">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
                 <h6 class="m-0 fw-bold text-dark"><i class="bi bi-kanban text-success me-2"></i>My Active Projects</h6>
@@ -527,70 +527,74 @@ include __DIR__ . '/../includes/header.php';
                 <?php if (empty($activeProjects)): ?>
                     <p class="text-muted small mb-0 text-center py-3">No active approved projects currently running.</p>
                 <?php else: ?>
-                    <?php foreach ($activeProjects as $proj): ?>
-                        <?php 
-                        $isLeadPi = ((int)$proj['scientist_id'] === $userId);
-                        ?>
-                        <div class="border rounded p-3 mb-3 bg-light-subtle">
-                            <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-1">
-                                <div class="d-flex align-items-center gap-1">
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace small">
-                                        <?= e($proj['project_number']) ?>
-                                    </span>
-                                    <?php if ($isLeadPi): ?>
-                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle extra-small">Lead PI</span>
-                                    <?php else: ?>
-                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle extra-small"><i class="bi bi-eye me-1"></i>Co-PI (Viewer)</span>
-                                    <?php endif; ?>
-                                </div>
-                                <small class="text-muted"><?= format_date($proj['start_date']) ?> to <?= format_date($proj['end_date']) ?></small>
-                            </div>
-                            <h6 class="fw-bold mb-2 text-dark">
-                                <?= e(mb_strimwidth($proj['proposal_title'], 0, 55, '...')) ?>
-                            </h6>
-                            <div class="d-flex justify-content-between text-muted small mb-1">
-                                <span>Approved Budget:</span>
-                                <strong class="text-success"><?= format_currency((float)$proj['approved_budget']) ?></strong>
-                            </div>
-                            <div class="d-flex justify-content-between text-muted small mb-2">
-                                <span>Expended to Date:</span>
-                                <strong class="<?= (float)$proj['total_expenditure'] > (float)$proj['approved_budget'] ? 'text-danger' : 'text-primary' ?>">
-                                    <?= format_currency((float)$proj['total_expenditure']) ?>
-                                </strong>
-                            </div>
-
-                            <?php if (!empty($proj['feedback_count']) && $proj['feedback_count'] > 0): ?>
-                                <div class="bg-warning-subtle border border-warning-subtle rounded p-2 mb-3">
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="badge bg-warning text-dark font-monospace" style="font-size: 0.68rem;">
-                                            <i class="bi bi-chat-left-text-fill me-1"></i><?= e($proj['latest_reviewer_role'] ?: 'Reviewer') ?> Feedback
-                                        </span>
-                                        <span class="badge bg-dark" style="font-size: 0.65rem;"><?= e($proj['latest_review_status'] ?: 'Reviewed') ?></span>
+                    <div class="row g-3">
+                        <?php foreach ($activeProjects as $proj): ?>
+                            <?php 
+                            $isLeadPi = ((int)$proj['scientist_id'] === $userId);
+                            ?>
+                            <div class="col-md-6 col-xl-4">
+                                <div class="border rounded p-3 bg-light-subtle h-100 d-flex flex-column">
+                                    <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-1">
+                                        <div class="d-flex align-items-center gap-1 flex-wrap">
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace small">
+                                                <?= e($proj['project_number']) ?>
+                                            </span>
+                                            <?php if ($isLeadPi): ?>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle extra-small">Lead PI</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle extra-small"><i class="bi bi-eye me-1"></i>Co-PI (Viewer)</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <small class="text-muted"><?= format_date($proj['start_date']) ?> to <?= format_date($proj['end_date']) ?></small>
                                     </div>
-                                    <?php if (!empty($proj['latest_feedback'])): ?>
-                                        <div class="text-dark small fst-italic" style="font-size: 0.78rem;">
-                                            "<?= e(mb_strimwidth($proj['latest_feedback'], 0, 95, '...')) ?>"
+                                    <h6 class="fw-bold mb-2 text-dark">
+                                        <?= e(mb_strimwidth($proj['proposal_title'], 0, 80, '...')) ?>
+                                    </h6>
+                                    <div class="d-flex justify-content-between text-muted small mb-1">
+                                        <span>Approved Budget:</span>
+                                        <strong class="text-success"><?= format_currency((float)$proj['approved_budget']) ?></strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-muted small mb-3">
+                                        <span>Expended to Date:</span>
+                                        <strong class="<?= (float)$proj['total_expenditure'] > (float)$proj['approved_budget'] ? 'text-danger' : 'text-primary' ?>">
+                                            <?= format_currency((float)$proj['total_expenditure']) ?>
+                                        </strong>
+                                    </div>
+
+                                    <?php if (!empty($proj['feedback_count']) && $proj['feedback_count'] > 0): ?>
+                                        <div class="bg-warning-subtle border border-warning-subtle rounded p-2 mb-3">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="badge bg-warning text-dark font-monospace" style="font-size: 0.68rem;">
+                                                    <i class="bi bi-chat-left-text-fill me-1"></i><?= e($proj['latest_reviewer_role'] ?: 'Reviewer') ?> Feedback
+                                                </span>
+                                                <span class="badge bg-dark" style="font-size: 0.65rem;"><?= e($proj['latest_review_status'] ?: 'Reviewed') ?></span>
+                                            </div>
+                                            <?php if (!empty($proj['latest_feedback'])): ?>
+                                                <div class="text-dark small fst-italic" style="font-size: 0.78rem;">
+                                                    "<?= e(mb_strimwidth($proj['latest_feedback'], 0, 95, '...')) ?>"
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     <?php endif; ?>
-                                </div>
-                            <?php endif; ?>
 
-                            <div class="d-flex gap-2">
-                                <a href="<?= url("/scientist/view-progress.php?project_id=" . ($proj['id'])) ?>" class="btn btn-sm btn-outline-success w-100">
-                                    <i class="bi bi-list-check me-1"></i> Reports (<?= (int)($proj['reports_count'] ?? 0) ?>)
-                                </a>
-                                <?php if ($isLeadPi): ?>
-                                    <a href="<?= url("/scientist/ongoing-projects.php?project_id=" . ($proj['id'])) ?>" class="btn btn-sm btn-outline-primary w-100">
-                                        <i class="bi bi-arrow-repeat me-1"></i> Progress Report
-                                    </a>
-                                <?php else: ?>
-                                    <a href="<?= url("/scientist/proposal-details.php?id=" . ($proj['proposal_id'])) ?>" class="btn btn-sm btn-outline-secondary w-100" title="Viewer Only">
-                                        <i class="bi bi-file-earmark-text me-1"></i> Proposal
-                                    </a>
-                                <?php endif; ?>
+                                    <div class="d-flex gap-2 mt-auto">
+                                        <a href="<?= url("/scientist/view-progress.php?project_id=" . ($proj['id'])) ?>" class="btn btn-sm btn-outline-success w-100">
+                                            <i class="bi bi-list-check me-1"></i> Reports (<?= (int)($proj['reports_count'] ?? 0) ?>)
+                                        </a>
+                                        <?php if ($isLeadPi): ?>
+                                            <a href="<?= url("/scientist/ongoing-projects.php?project_id=" . ($proj['id'])) ?>" class="btn btn-sm btn-outline-primary w-100">
+                                                <i class="bi bi-arrow-repeat me-1"></i> Progress Report
+                                            </a>
+                                        <?php else: ?>
+                                            <a href="<?= url("/scientist/proposal-details.php?id=" . ($proj['proposal_id'])) ?>" class="btn btn-sm btn-outline-secondary w-100" title="Viewer Only">
+                                                <i class="bi bi-file-earmark-text me-1"></i> Proposal
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>

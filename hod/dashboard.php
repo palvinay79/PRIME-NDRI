@@ -222,10 +222,10 @@ include __DIR__ . '/../includes/header.php';
                 <div class="list-group list-group-flush rounded bg-white border">
                     <?php foreach ($mySubmissions as $myP): ?>
                         <div class="list-group-item px-3 py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                            <div class="d-flex align-items-center gap-2 flex-grow-1">
+                            <div class="d-flex align-items-center gap-2 flex-grow-1 flex-wrap">
                                 <?= render_proposal_category_badge($myP['proposal_category'] ?? 'new') ?>
                                 <span class="font-monospace fw-semibold small text-primary"><?= e($myP['proposal_number']) ?></span>
-                                <span class="text-dark fw-semibold small text-truncate" style="max-width: 420px;"><?= e($myP['title']) ?></span>
+                                <span class="text-dark fw-semibold small"><?= e($myP['title']) ?></span>
                             </div>
                             <div class="d-flex align-items-center gap-2">
                                 <?= render_status_badge($myP['current_status']) ?>
@@ -256,12 +256,12 @@ include __DIR__ . '/../includes/header.php';
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th style="width: 190px;">Submission Type & No.</th>
+                    <th style="width: 165px;">Submission Type & No.</th>
                     <th>Proposal / Project Details</th>
-                    <th style="width: 170px;">Principal Investigator</th>
-                    <th style="width: 140px;">Budget / Utilized</th>
-                    <th style="width: 120px;">Submitted</th>
-                    <th style="width: 170px;" class="text-end">Action</th>
+                    <th style="width: 155px;">Principal Investigator</th>
+                    <th style="width: 130px;">Budget / Utilized</th>
+                    <th style="width: 105px;">Submitted</th>
+                    <th style="width: 155px;" class="text-end">Action</th>
                 </tr>
             </thead>
             <tbody>
